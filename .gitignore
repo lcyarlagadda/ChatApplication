@@ -2,10 +2,11 @@
 
 # dependencies
 /node_modules
-/frontend/chat-frontend/node_modules
-/backend/chat-backend/node_modules
-/backend/chat-backend/.env
-/frontend/chat-frontend/.env
+/chat-frontend/node_modules
+/chat-backend/node_modules
+/chat-frontend/package-lock.json
+/chat-backend/package-lock.json
+/chat-frontend/.env
 
 /.pnp
 .pnp.js
