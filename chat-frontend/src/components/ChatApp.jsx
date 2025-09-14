@@ -14,6 +14,7 @@ import {
   validateFile,
 } from "../utils/fileHelpers";
 import ObjectId from "../utils/ObjectId";
+import NotificationBubble from "./NotificationBubble";
 
 const ChatApp = () => {
   const {
@@ -48,6 +49,7 @@ const ChatApp = () => {
   const [showLogin, setShowLogin] = useState(!currentUser);
   const [messageStatuses, setMessageStatuses] = useState({});
   const [notification, setNotification] = useState(null);
+  const [messageNotifications, setMessageNotifications] = useState([]);
 
   // Update showLogin when currentUser changes
   useEffect(() => {
@@ -62,6 +64,11 @@ const ChatApp = () => {
       );
       initializeUserData();
       connectSocket();
+      
+      // Request notification permission
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
     } else if (currentUser && currentUser.blockedUsers === undefined) {
       console.log("Current user exists but missing blockedUsers, waiting...");
       // Don't initialize yet - wait for complete profile
@@ -125,6 +132,117 @@ const ChatApp = () => {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  // Notification management functions
+  const addMessageNotification = (message, conversation, sender) => {
+    // Only show notification if the chat is not currently open
+    if (activeChat?._id === conversation._id) {
+      return;
+    }
+
+    // Don't show notifications for messages sent by current user
+    if (sender._id === currentUser._id) {
+      return;
+    }
+
+    const notificationId = `${message._id}-${Date.now()}`;
+    
+    // Create message preview
+    let messagePreview = message.content || '';
+    if (message.messageType !== 'text' && message.fileInfo) {
+      const fileName = message.fileInfo.displayName || message.fileInfo.originalName || 'File';
+      const fileIcon = message.messageType === 'image' ? '🖼️' :
+                      message.messageType === 'video' ? '🎥' :
+                      message.messageType === 'audio' ? '🎵' :
+                      message.messageType === 'pdf' ? '📄' : '📎';
+      messagePreview = `${fileIcon} ${fileName}`;
+    }
+
+    const newNotification = {
+      id: notificationId,
+      messageId: message._id,
+      conversationId: conversation._id,
+      conversation: conversation,
+      sender: sender,
+      messagePreview: messagePreview,
+      timestamp: message.createdAt || new Date().toISOString()
+    };
+
+    setMessageNotifications(prev => [...prev, newNotification]);
+
+    // Also show browser notification if permission is granted
+    if ('Notification' in window && Notification.permission === 'granted') {
+      const conversationName = conversation.name || sender.name || 'Unknown';
+      new Notification(`New message from ${conversationName}`, {
+        body: messagePreview,
+        icon: '/favicon.ico',
+        tag: conversation._id, // This will replace previous notifications for the same conversation
+        requireInteraction: false
+      });
+    }
+  };
+
+  const dismissNotification = (notificationId) => {
+    setMessageNotifications(prev => 
+      prev.filter(notif => notif.id !== notificationId)
+    );
+  };
+
+  // Add conversation notification function
+  const addConversationNotification = (conversation, createdBy) => {
+    // Don't show notification if the conversation was created by current user
+    if (createdBy._id === currentUser._id) {
+      return;
+    }
+
+    const notificationId = `conv-${conversation._id}-${Date.now()}`;
+    
+    // Create conversation preview
+    let conversationPreview = '';
+    if (conversation.type === 'group') {
+      conversationPreview = `You were added to group "${conversation.name}"`;
+    } else if (conversation.type === 'broadcast') {
+      conversationPreview = `You were added to broadcast channel "${conversation.name}"`;
+    } else {
+      conversationPreview = `New conversation with ${createdBy.name}`;
+    }
+
+    const newNotification = {
+      id: notificationId,
+      conversationId: conversation._id,
+      conversation: conversation,
+      sender: createdBy,
+      messagePreview: conversationPreview,
+      timestamp: conversation.createdAt || new Date().toISOString(),
+      type: 'conversation' // Mark as conversation notification
+    };
+
+    setMessageNotifications(prev => [...prev, newNotification]);
+
+    // Also show browser notification if permission is granted
+    if ('Notification' in window && Notification.permission === 'granted') {
+      const conversationName = conversation.name || createdBy.name || 'Unknown';
+      new Notification(`New conversation: ${conversationName}`, {
+        body: conversationPreview,
+        icon: '/favicon.ico',
+        tag: `conv-${conversation._id}`, // This will replace previous notifications for the same conversation
+        requireInteraction: false
+      });
+    }
+  };
+
+  const handleNotificationClick = (notification) => {
+    // Find and set the conversation as active
+    const conversation = conversations.find(conv => conv._id === notification.conversationId);
+    if (conversation) {
+      setActiveChat(conversation);
+      // Mark conversation as viewed
+      if (typeof handleConversationViewed === 'function') {
+        handleConversationViewed(conversation._id);
+      }
+    }
+  };
+
+
   const fetchUserProfile = async () => {
     try {
       const userProfileResponse = await sessionManager.authenticatedRequest(
@@ -178,6 +296,9 @@ const ChatApp = () => {
         content: message.content?.substring(0, 30) + "...",
       });
 
+      // Find the conversation to get full conversation data
+      const conversation = conversations.find(conv => conv._id === conversationId);
+
       // SIMPLIFIED: Just check for duplicates by ID and add if not exists
       setMessages((prev) => {
         const existingMessages = prev[conversationId] || [];
@@ -199,6 +320,44 @@ const ChatApp = () => {
           [conversationId]: [...existingMessages, message],
         };
       });
+
+      // Show notification bubble if chat is not open and message is not from current user
+      if (conversation && message.sender && message.sender._id !== currentUser._id) {
+        addMessageNotification(message, conversation, message.sender);
+      }
+
+      // ALTERNATIVE APPROACH: Also update conversation directly in new message handler
+      // This ensures the sidebar updates even if conversation_updated event fails
+      console.log("📝 Updating conversation directly from new message handler");
+      updateConversations((prevConversations) =>
+        prevConversations.map((conv) => {
+          if (conv._id === conversationId) {
+            // Create updated last message for sidebar
+            let lastMessageContent = message.content;
+            if (message.messageType !== 'text' && message.fileInfo) {
+              const fileName = message.fileInfo.displayName || message.fileInfo.originalName || 'File';
+              const fileIcon = message.messageType === 'image' ? '🖼️' :
+                              message.messageType === 'video' ? '🎥' :
+                              message.messageType === 'audio' ? '🎵' :
+                              message.messageType === 'pdf' ? '📄' : '📎';
+              lastMessageContent = `${fileIcon} ${fileName}`;
+            }
+
+            return {
+              ...conv,
+              lastMessage: {
+                content: lastMessageContent,
+                sender: message.sender._id,
+                timestamp: message.createdAt,
+                messageType: message.messageType,
+                fileInfo: message.fileInfo
+              },
+              updatedAt: message.createdAt
+            };
+          }
+          return conv;
+        })
+      );
     });
 
     // Handle message status updates
@@ -369,7 +528,14 @@ const ChatApp = () => {
 
     // New conversation created
     socketService.onConversationCreated((data) => {
-      const { conversation } = data;
+      const { conversation, createdBy } = data;
+
+      console.log("🔔 New conversation created:", {
+        conversationId: conversation._id,
+        conversationType: conversation.type,
+        createdBy: createdBy?.name,
+        conversationName: conversation.name
+      });
 
       // Check if conversation already exists
       const existingConv = conversations.find(
@@ -393,6 +559,11 @@ const ChatApp = () => {
 
         // Join the conversation room
         socketService.joinConversation(conversation._id);
+
+        // Show notification bubble for new conversation
+        if (createdBy) {
+          addConversationNotification(conversation, createdBy);
+        }
       }
     });
 
@@ -481,12 +652,33 @@ const ChatApp = () => {
     socketService.onConversationUpdate((data) => {
       const { conversation, updateType } = data;
 
+      console.log("🔔 Conversation update received:", {
+        conversationId: conversation._id,
+        updateType,
+        lastMessage: conversation.lastMessage,
+        updatedAt: conversation.updatedAt
+      });
+
       // Update conversation in state immediately
-      updateConversations(
-        conversations.map((conv) =>
+      updateConversations((prevConversations) => {
+        const updatedConversations = prevConversations.map((conv) =>
           conv._id === conversation._id ? conversation : conv
-        )
-      );
+        );
+        
+        const foundConv = prevConversations.find(conv => conv._id === conversation._id);
+        console.log("🔄 Updating conversations state:", {
+          conversationId: conversation._id,
+          conversationIdType: typeof conversation._id,
+          foundConversation: foundConv ? 'YES' : 'NO',
+          foundConvId: foundConv?._id,
+          foundConvIdType: typeof foundConv?._id,
+          totalConversations: prevConversations.length,
+          updatedConversations: updatedConversations.length,
+          allConvIds: prevConversations.map(conv => ({ id: conv._id, type: typeof conv._id }))
+        });
+        
+        return updatedConversations;
+      });
 
       // Update active chat if it matches
       if (activeChat?._id === conversation._id) {
@@ -494,7 +686,10 @@ const ChatApp = () => {
       }
 
       // Show notifications for specific update types
-      if (updateType === "admin_added") {
+      if (updateType === "new_message") {
+        // Don't show notification for new messages as they're handled by the message notification system
+        console.log("Conversation updated with new message:", conversation._id);
+      } else if (updateType === "admin_added") {
         // Find the newly added admin
         const newAdmin = conversation.participants.find(
           (p) =>
@@ -837,6 +1032,7 @@ const ChatApp = () => {
   };
 
   const cleanupSocketListeners = () => {
+    // Remove all listeners by calling off without callback (removes all listeners for that event)
     socketService.off("new_message");
     socketService.off("message_status_update");
     socketService.off("messages_seen_bulk");
@@ -1020,6 +1216,11 @@ const ChatApp = () => {
         conversations.map((conv) =>
           conv._id === activeChat._id ? { ...conv, unreadCount: 0 } : conv
         )
+      );
+
+      // Clear notifications for the active chat
+      setMessageNotifications(prev => 
+        prev.filter(notif => notif.conversationId !== activeChat._id)
       );
     }
   }, [activeChat?._id, currentUser]);
@@ -2235,6 +2436,15 @@ const ChatApp = () => {
           </div>
         </div>
       )}
+
+      {/* Message Notification Bubbles */}
+      <NotificationBubble
+        notifications={messageNotifications}
+        onNotificationClick={handleNotificationClick}
+        onDismiss={dismissNotification}
+        isDark={isDark}
+      />
+
 
       <ChatLayout
         messages={messages}

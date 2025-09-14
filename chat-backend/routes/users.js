@@ -356,12 +356,17 @@ router.post('/:id/conversation', auth, async (req, res) => {
 
     // Emit conversation created event via Socket.IO
     if (req.socketService) {
+      // Get creator info
+      const creator = await User.findById(currentUserId).select('name email avatar');
+      
       // Notify both participants
       req.socketService.sendNotificationToUser(currentUserId, 'conversation_created', {
-        conversation: conversation.toObject()
+        conversation: conversation.toObject(),
+        createdBy: creator
       });
       req.socketService.sendNotificationToUser(otherUserId, 'conversation_created', {
-        conversation: conversation.toObject()
+        conversation: conversation.toObject(),
+        createdBy: creator
       });
     }
 

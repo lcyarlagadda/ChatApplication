@@ -18,7 +18,8 @@ import {
   Radio,
   Settings,
   UserX,
-  Shield
+  Shield,
+  Bell
 } from "lucide-react";
 import { formatTime, getUnreadCount} from "../utils/helpers";
 import { getSidebarPreviewText, shouldShowMessageSender } from "../utils/fileHelpers";
@@ -771,6 +772,7 @@ const getLastMessagePreview = (conversation) => {
             )}
           </div>
         </div>
+
 
         {/* Search Results or Conversations */}
         <div className="flex-1 overflow-y-auto">

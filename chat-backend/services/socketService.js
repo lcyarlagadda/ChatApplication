@@ -324,6 +324,25 @@ class SocketService {
     conversation.updatedAt = new Date();
     await conversation.save();
     
+    // Emit conversation update to all participants
+    // Populate the conversation with all necessary fields before emitting
+    await conversation.populate('participants.user', 'name email avatar');
+    
+    console.log('🔔 Emitting conversation_updated event:', {
+      conversationId,
+      conversationIdType: typeof conversationId,
+      conversationObjectId: conversation._id,
+      conversationObjectIdType: typeof conversation._id,
+      lastMessage: conversation.lastMessage,
+      updatedAt: conversation.updatedAt,
+      participantsCount: conversation.participants.length
+    });
+    
+    this.io.to(`conversation_${conversationId}`).emit('conversation_updated', {
+      conversation: conversation.toObject(),
+      updateType: 'new_message'
+    });
+    
     // First, confirm message sent to sender with tempId mapping
     socket.emit('message_status_update', {
       messageId: message._id,

@@ -385,8 +385,14 @@ class SocketService {
   // Remove event listeners
   off(event, callback) {
     if (this.socket) {
-      this.socket.off(event, callback);
-      console.log(`${event} listener removed`);
+      if (callback) {
+        this.socket.off(event, callback);
+        console.log(`${event} listener removed`);
+      } else {
+        // Remove all listeners for this event if no callback provided
+        this.socket.removeAllListeners(event);
+        console.log(`All ${event} listeners removed`);
+      }
     }
   }
 

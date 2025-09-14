@@ -189,11 +189,16 @@ router.post('/', async (req, res) => {
       
       // Emit Socket.IO events
       if (req.socketService) {
+        // Get creator info
+        const creator = await User.findById(userId).select('name email avatar');
+        
         req.socketService.sendNotificationToUser(userId, 'conversation_created', {
-          conversation: conversation.toObject()
+          conversation: conversation.toObject(),
+          createdBy: creator
         });
         req.socketService.sendNotificationToUser(otherUserId, 'conversation_created', {
-          conversation: conversation.toObject()
+          conversation: conversation.toObject(),
+          createdBy: creator
         });
       }
       
@@ -288,11 +293,17 @@ router.post('/', async (req, res) => {
 
     // Emit Socket.IO event to all participants
     if (req.socketService && conversation) {
+      // Get creator info
+      const creator = await User.findById(userId).select('name email avatar');
+      
       conversation.participants.forEach(participant => {
         req.socketService.sendNotificationToUser(
           participant.user._id.toString(), 
           'conversation_created', 
-          { conversation: conversation.toObject() }
+          { 
+            conversation: conversation.toObject(),
+            createdBy: creator
+          }
         );
       });
     }
@@ -340,11 +351,16 @@ router.post('/users/:userId/conversation', async (req, res) => {
     
     // Emit Socket.IO events
     if (req.socketService) {
+      // Get creator info
+      const creator = await User.findById(currentUserId).select('name email avatar');
+      
       req.socketService.sendNotificationToUser(currentUserId, 'conversation_created', {
-        conversation: conversation.toObject()
+        conversation: conversation.toObject(),
+        createdBy: creator
       });
       req.socketService.sendNotificationToUser(otherUserId, 'conversation_created', {
-        conversation: conversation.toObject()
+        conversation: conversation.toObject(),
+        createdBy: creator
       });
     }
     
@@ -888,8 +904,12 @@ router.post('/:id/participants', async (req, res) => {
       });
       
       // Notify the new participant they were added
+      // Get the user who added the participant (current user)
+      const addedBy = await User.findById(currentUserId).select('name email avatar');
+      
       req.socketService.sendNotificationToUser(newParticipantId, 'conversation_created', {
-        conversation: conversation.toObject()
+        conversation: conversation.toObject(),
+        createdBy: addedBy
       });
       
       // Send system message
