@@ -559,6 +559,18 @@ router.post('/:conversationId', auth, [
           message: message.toObject()
         }
       );
+
+      // Process delivery status for online users
+      const otherParticipants = conversation.participants
+        .filter(p => p.user._id.toString() !== req.user.id);
+      
+      const onlineParticipants = otherParticipants
+        .filter(p => req.socketService.isUserOnline(p.user._id.toString()))
+        .map(p => p.user._id.toString());
+      
+      if (onlineParticipants.length > 0) {
+        await req.socketService.processMessageDelivery(message._id, onlineParticipants, req.user.id);
+      }
     }
 
     res.status(201).json({

@@ -1,6 +1,6 @@
 // components/ChatApp.js - Complete updated version with fixed message status
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import LoginForm from "./Login/LoginForm";
 import ChatLayout from "./ChatLayout";
 import { useUser } from "../contexts/UserContext";
@@ -276,6 +276,11 @@ const ChatApp = () => {
       if (currentUser) {
         socketService.joinUserRoom(currentUser._id);
       }
+      
+      // Refresh unread counts when socket reconnects (in case user was offline)
+      socketService.onConnect(() => {
+        refreshUnreadCounts();
+      });
     }
   };
 
@@ -289,12 +294,6 @@ const ChatApp = () => {
     socketService.onNewMessage((data) => {
       const { conversationId, message } = data;
 
-      console.log("Socket message received:", {
-        conversationId,
-        messageId: message._id,
-        sender: message.sender?.name,
-        content: message.content?.substring(0, 30) + "...",
-      });
 
       // Find the conversation to get full conversation data
       const conversation = conversations.find(conv => conv._id === conversationId);
@@ -309,12 +308,10 @@ const ChatApp = () => {
         );
 
         if (messageExists) {
-          console.log("Message already exists, skipping:", message._id);
           return prev;
         }
 
         // Add new message
-        console.log("Adding new message:", message._id);
         return {
           ...prev,
           [conversationId]: [...existingMessages, message],
@@ -326,49 +323,53 @@ const ChatApp = () => {
         addMessageNotification(message, conversation, message.sender);
       }
 
-      // ALTERNATIVE APPROACH: Also update conversation directly in new message handler
-      // This ensures the sidebar updates even if conversation_updated event fails
-      console.log("📝 Updating conversation directly from new message handler");
-      updateConversations((prevConversations) =>
-        prevConversations.map((conv) => {
-          if (conv._id === conversationId) {
-            // Create updated last message for sidebar
-            let lastMessageContent = message.content;
-            if (message.messageType !== 'text' && message.fileInfo) {
-              const fileName = message.fileInfo.displayName || message.fileInfo.originalName || 'File';
-              const fileIcon = message.messageType === 'image' ? '🖼️' :
-                              message.messageType === 'video' ? '🎥' :
-                              message.messageType === 'audio' ? '🎵' :
-                              message.messageType === 'pdf' ? '📄' : '📎';
-              lastMessageContent = `${fileIcon} ${fileName}`;
-            }
+        // ALTERNATIVE APPROACH: Also update conversation directly in new message handler
+        // This ensures the sidebar updates even if conversation_updated event fails
+        updateConversations((prevConversations) =>
+          prevConversations.map((conv) => {
+            if (conv._id === conversationId) {
+              // Create updated last message for sidebar
+              let lastMessageContent = message.content;
+              if (message.messageType !== 'text' && message.fileInfo) {
+                const fileName = message.fileInfo.displayName || message.fileInfo.originalName || 'File';
+                const fileIcon = message.messageType === 'image' ? '🖼️' :
+                                message.messageType === 'video' ? '🎥' :
+                                message.messageType === 'audio' ? '🎵' :
+                                message.messageType === 'pdf' ? '📄' : '📎';
+                lastMessageContent = `${fileIcon} ${fileName}`;
+              }
 
-            return {
-              ...conv,
-              lastMessage: {
-                content: lastMessageContent,
-                sender: message.sender._id,
-                timestamp: message.createdAt,
-                messageType: message.messageType,
-                fileInfo: message.fileInfo
-              },
-              updatedAt: message.createdAt
-            };
-          }
-          return conv;
-        })
-      );
+              // Only increment unread count if message is not from current user AND conversation is not active
+              const isFromCurrentUser = message.sender._id === currentUser._id;
+              const isActiveConversation = activeChat?._id === conversationId;
+              const currentUnreadCount = conv.unreadCount || 0;
+
+              return {
+                ...conv,
+                lastMessage: {
+                  content: lastMessageContent,
+                  sender: message.sender._id,
+                  timestamp: message.createdAt,
+                  messageType: message.messageType,
+                  fileInfo: message.fileInfo
+                },
+                updatedAt: message.createdAt,
+                unreadCount: (isFromCurrentUser || isActiveConversation) ? currentUnreadCount : currentUnreadCount + 1
+              };
+            }
+            return conv;
+          })
+        );
     });
 
     // Handle message status updates
     socketService.onMessageStatusUpdate((data) => {
       const { messageId, status, timestamp, deliveredTo, readBy } = data;
 
-      console.log("Message status update:", { messageId, status });
-
       // SIMPLIFIED: Just match by real message ID
       setMessages((prev) => {
         const updated = { ...prev };
+        
         Object.keys(updated).forEach((conversationId) => {
           updated[conversationId] = updated[conversationId].map((msg) => {
             if (msg._id === messageId) {
@@ -383,6 +384,7 @@ const ChatApp = () => {
             return msg;
           });
         });
+        
         return updated;
       });
 
@@ -421,6 +423,29 @@ const ChatApp = () => {
           });
         }
         return updated;
+      });
+
+      // Update conversation unread count to 0 when messages are marked as seen
+      updateConversations((prevConversations) => {
+        return prevConversations.map((conv) => {
+          if (conv._id === conversationId) {
+            console.log(`🔍 Updating unread count to 0 for conversation ${conversationId}`);
+            return {
+              ...conv,
+              unreadCount: 0,
+              participants: conv.participants.map((p) => {
+                if (p.user._id === currentUser._id) {
+                  return {
+                    ...p,
+                    lastRead: timestamp
+                  };
+                }
+                return p;
+              })
+            };
+          }
+          return conv;
+        });
       });
     });
 
@@ -1089,10 +1114,23 @@ const ChatApp = () => {
       const conversationsData = await conversationsResponse.json();
 
       if (conversationsData.success) {
+        // Fetch unread counts for all conversations
+        const unreadCountsResponse = await sessionManager.authenticatedRequest(
+          "/conversations/unread-counts"
+        );
+        
+        let unreadCounts = {};
+        if (unreadCountsResponse.ok) {
+          const unreadCountsData = await unreadCountsResponse.json();
+          if (unreadCountsData.success) {
+            unreadCounts = unreadCountsData.unreadCounts;
+          }
+        }
+        
         const conversationsWithUnread = conversationsData.data.map(
           (conversation) => ({
             ...conversation,
-            unreadCount: 0,
+            unreadCount: unreadCounts[conversation._id] || 0,
           })
         );
 
@@ -1207,6 +1245,26 @@ const ChatApp = () => {
     }
   };
 
+  const refreshUnreadCounts = async () => {
+    try {
+      const response = await sessionManager.authenticatedRequest("/conversations/unread-counts");
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          // Update conversations with fresh unread counts
+          updateConversations((prevConversations) => {
+            return prevConversations.map((conv) => ({
+              ...conv,
+              unreadCount: data.unreadCounts[conv._id] || 0
+            }));
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error refreshing unread counts:", error);
+    }
+  };
+
   // Handle active chat change - UPDATED: Only update UI, don't auto-mark as read
   useEffect(() => {
     if (activeChat && currentUser) {
@@ -1226,14 +1284,27 @@ const ChatApp = () => {
   }, [activeChat?._id, currentUser]);
 
   // NEW: Function to handle explicit conversation viewing (when user actually clicks/focuses)
-  const handleConversationViewed = (conversationId) => {
-    // Only now mark conversation as read via socket
-    socketService.viewConversation(conversationId);
+  const handleConversationViewed = useCallback((conversationId) => {
+    // Only call markConversationRead - this handles both viewing and marking as read
+    // viewConversation is redundant since markConversationRead does the same work
     socketService.markConversationRead(conversationId);
 
     // Update user interaction timestamp
     window.lastUserInteraction = Date.now();
-  };
+    
+    // Also immediately reset unread count for this conversation
+    updateConversations((prevConversations) => {
+      return prevConversations.map((conv) => {
+        if (conv._id === conversationId) {
+          return {
+            ...conv,
+            unreadCount: 0
+          };
+        }
+        return conv;
+      });
+    });
+  }, [updateConversations]);
 
   const handleLogin = async (credentials) => {
     try {
@@ -1301,7 +1372,6 @@ const ChatApp = () => {
       // Generate real ObjectId on client
       const messageId = ObjectId.generate();
 
-      console.log("Sending message with client-generated ID:", messageId);
 
       // Update user interaction timestamp
       window.lastUserInteraction = Date.now();
@@ -2416,7 +2486,6 @@ const ChatApp = () => {
   // Show main chat application
   return (
     <div>
-      {console.log("notif", notification)}
       {notification && notification.message !== "" && (
         <div
           className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg transition-all ${

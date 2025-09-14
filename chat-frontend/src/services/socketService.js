@@ -97,13 +97,13 @@ class SocketService {
   viewConversation(conversationId) {
     if (this.socket && conversationId) {
       this.socket.emit('conversation_viewed', { conversationId });
-      console.log("User actively viewed conversation", conversationId);
     }
   }
 
   // Send a new message
   sendMessage(conversationId, messageData) {
     if (this.socket && conversationId && messageData) {
+      console.log("🔍 Sending message:", { conversationId, content: messageData.content, messageType: messageData.messageType });
       this.socket.emit('send_message', {
         conversationId,
         ...messageData
@@ -132,7 +132,6 @@ class SocketService {
   markConversationRead(conversationId) {
     if (this.socket && conversationId) {
       this.socket.emit('mark_conversation_read', { conversationId });
-      console.log("Conversation explicitly marked as read", conversationId);
     }
   }
 
@@ -170,14 +169,12 @@ class SocketService {
   startTyping(conversationId) {
     if (this.socket && conversationId) {
       this.socket.emit('typing_start', { conversationId });
-      console.log("typing start", conversationId)
     }
   }
 
   stopTyping(conversationId) {
     if (this.socket && conversationId) {
       this.socket.emit('typing_stop', { conversationId });
-      console.log("typing stop", conversationId)
     }
   }
 
@@ -216,169 +213,155 @@ class SocketService {
   onNewMessage(callback) {
     if (this.socket) {
       this.socket.on('new_message', callback);
-      console.log("new message listener added");
     }
   }
 
   // Message status updates
   onMessageStatusUpdate(callback) {
     if (this.socket) {
-      this.socket.on('message_status_update', callback);
-      console.log("message_status_update listener added");
+      this.socket.on('message_status_update', (data) => {
+        callback(data);
+      });
     }
   }
 
   onMessagesSeenBulk(callback) {
     if (this.socket) {
-      this.socket.on('messages_seen_bulk', callback);
-      console.log("messages_seen_bulk listener added");
+      this.socket.on('messages_seen_bulk', (data) => {
+        callback(data);
+      });
     }
   }
 
   onMessageEdited(callback) {
     if (this.socket) {
       this.socket.on('message_edited', callback);
-      console.log("message_edited listener added");
     }
   }
 
   onMessageDeleted(callback) {
     if (this.socket) {
       this.socket.on('message_deleted', callback);
-      console.log("message_deleted listener added");
     }
   }
 
   onConversationCreated(callback) {
     if (this.socket) {
       this.socket.on('conversation_created', callback);
-      console.log('conversation_created listener added');
+    }
+  }
+
+  onConnect(callback) {
+    if (this.socket) {
+      this.socket.on('connect', callback);
     }
   }
 
   onConversationDeleted(callback) {
     if (this.socket) {
       this.socket.on('conversation_deleted', callback);
-      console.log('conversation_deleted listener added');
     }
   }
 
   onMessageReaction(callback) {
     if (this.socket) {
       this.socket.on('message_reaction', callback);
-      console.log("message_reaction listener added");
     }
   }
 
   onTypingStart(callback) {
     if (this.socket) {
       this.socket.on('typing_start', callback);
-      console.log("typing_start listener added");
     }
   }
 
   onTypingStop(callback) {
     if (this.socket) {
       this.socket.on('typing_stop', callback);
-      console.log("typing_stop listener added");
     }
   }
 
   onUserStatusUpdate(callback) {
     if (this.socket) {
       this.socket.on('user_status_update', callback);
-      console.log("user_status_update listener added");
     }
   }
 
   onUserOnline(callback) {
     if (this.socket) {
       this.socket.on('user_online', callback);
-      console.log("user_online listener added");
     }
   }
 
   onUserOffline(callback) {
     if (this.socket) {
       this.socket.on('user_offline', callback);
-      console.log("user_offline listener added");
     }
   }
 
   onConversationUpdate(callback) {
     if (this.socket) {
       this.socket.on('conversation_updated', callback);
-      console.log("conversation_updated listener added");
     }
   }
 
   onUserBlocked(callback) {
     if (this.socket) {
       this.socket.on('user_blocked', callback);
-      console.log("user_blocked listener added");
     }
   }
 
   onUserUnblocked(callback) {
     if (this.socket) {
       this.socket.on('user_unblocked', callback);
-      console.log("user_unblocked listener added");
     }
   }
 
   onUserBlockedYou(callback) {
     if (this.socket) {
       this.socket.on('user_blocked_you', callback);
-      console.log("user_blocked_you listener added");
     }
   }
 
   onUserUnblockedYou(callback) {
     if (this.socket) {
       this.socket.on('user_unblocked_you', callback);
-      console.log("user_unblocked_you listener added");
     }
   }
 
   onConversationLeft(callback) {
     if (this.socket) {
       this.socket.on('conversation_left', callback);
-      console.log("conversation_left listener added");
     }
   }
 
   onAdminTransferred(callback) {
     if (this.socket) {
       this.socket.on('admin_transferred', callback);
-      console.log("admin_transferred listener added");
     }
   }
 
   onPromotedToAdmin(callback) {
     if (this.socket) {
       this.socket.on('promoted_to_admin', callback);
-      console.log("promoted_to_admin listener added");
     }
   }
 
   onConversationCleared(callback) {
     if (this.socket) {
       this.socket.on('conversation_cleared', callback);
-      console.log("conversation_cleared listener added");
     }
   }
 
   onAdminRemoved(callback) {
     if (this.socket) {
       this.socket.on('admin_removed', callback);
-      console.log("admin_removed listener added");
     }
   }
 
   on(eventName, callback) {
     if (this.socket && eventName && callback) {
       this.socket.on(eventName, callback);
-      console.log(`${eventName} listener added`);
     }
   }
 
@@ -387,11 +370,9 @@ class SocketService {
     if (this.socket) {
       if (callback) {
         this.socket.off(event, callback);
-        console.log(`${event} listener removed`);
       } else {
         // Remove all listeners for this event if no callback provided
         this.socket.removeAllListeners(event);
-        console.log(`All ${event} listeners removed`);
       }
     }
   }

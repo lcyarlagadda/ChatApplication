@@ -343,7 +343,7 @@ const loadMoreMessages = async () => {
   return (
     <div className="flex-1 flex flex-col relative h-full">
       {/* Custom scrollbar styles and highlight styles */}
-      <style jsx>{`
+      <style jsx="true">{`
         .custom-scrollbar {
           scrollbar-width: thin;
           scrollbar-color: ${isDark ? '#4B5563 #1F2937' : '#D1D5DB #F9FAFB'};

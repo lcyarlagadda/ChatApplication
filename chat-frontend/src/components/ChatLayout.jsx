@@ -30,7 +30,8 @@ const ChatLayout = ({
   onUpdateConversation,
   onClearChat,
   onBlockUser,
-  onLeaveConversation
+  onLeaveConversation,
+  onConversationViewed
 }) => {
   // Get state from context
   const {
@@ -295,6 +296,7 @@ const ChatLayout = ({
             onClearChat={onClearChat}
             onBlockUser={onBlockUser}
             onLeaveConversation={onLeaveConversation}
+            onConversationViewed={onConversationViewed}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center">

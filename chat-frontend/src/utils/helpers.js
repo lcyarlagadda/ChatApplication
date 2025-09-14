@@ -190,7 +190,27 @@ export const isUserOnline = (userId, onlineUsers = []) => {
 };
 
 export const getUnreadCount = (conversation) => {
-  return conversation?.unreadCount || 0;
+  // If conversation has an explicit unreadCount, use it
+  if (conversation?.unreadCount !== undefined) {
+    return conversation.unreadCount;
+  }
+  
+  // Otherwise, calculate based on lastRead timestamp
+  if (!conversation?.lastMessage?.timestamp) {
+    return 0;
+  }
+  
+  // Find the participant's lastRead timestamp
+  const participant = conversation.participants?.find(p => p.user?._id);
+  if (!participant?.lastRead) {
+    return 1; // If no lastRead, assume there's at least one unread message
+  }
+  
+  const lastMessageTime = new Date(conversation.lastMessage.timestamp);
+  const lastReadTime = new Date(participant.lastRead);
+  
+  // If last message is after last read, there are unread messages
+  return lastMessageTime > lastReadTime ? 1 : 0;
 };
 
 export const sortConversationsByActivity = (conversations) => {

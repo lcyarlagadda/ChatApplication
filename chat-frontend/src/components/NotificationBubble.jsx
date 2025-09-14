@@ -17,6 +17,7 @@ const NotificationBubble = ({
   }, [notifications]);
 
   const handleNotificationClick = (notification) => {
+    
     if (onNotificationClick) {
       onNotificationClick(notification);
     }

@@ -108,11 +108,8 @@ class SocketService {
         
         console.log(`User ${socket.user.name} joined conversation ${conversationId}`);
         
-        // REMOVED: Auto-mark messages as seen on join
-        // This was causing the refresh issue
-        // setTimeout(() => {
-        //   this.markConversationMessagesAsSeen(socket, conversationId);
-        // }, 500);
+        // Auto-mark undelivered messages as delivered when user joins
+        this.markUndeliveredMessagesAsDelivered(socket, conversationId);
       });
 
       // Handle leaving conversation rooms
@@ -136,13 +133,15 @@ class SocketService {
       socket.on('conversation_viewed', async (data) => {
         try {
           const { conversationId } = data;
-          console.log(`User ${socket.user.name} actively viewed conversation ${conversationId}`);
           
           // Update last activity time
           this.userLastActivity.set(socket.userId, new Date());
           
-          // Mark conversation messages as seen only when explicitly viewed
+          // Mark conversation messages as seen when explicitly viewed
           await this.markConversationMessagesAsSeen(socket, conversationId);
+          
+          // Update conversation's lastRead timestamp
+          await this.updateConversationLastRead(socket, conversationId);
         } catch (error) {
           console.error('Error handling conversation_viewed:', error);
         }
@@ -177,8 +176,25 @@ class SocketService {
 
       socket.on('mark_conversation_read', async (data) => {
         try {
-          console.log(`User ${socket.user.name} explicitly marking conversation ${data.conversationId} as read`);
-          await this.markConversationMessagesAsSeen(socket, data.conversationId);
+          const { conversationId } = data;
+          const rateLimitKey = `${socket.userId}_${conversationId}`;
+          const now = Date.now();
+          
+          // Rate limit: only allow one call per conversation per 2 seconds
+          if (this.lastMarkReadCall && this.lastMarkReadCall[rateLimitKey]) {
+            const timeSinceLastCall = now - this.lastMarkReadCall[rateLimitKey];
+            if (timeSinceLastCall < 2000) {
+              return; // Skip this call if it's too soon
+            }
+          }
+          
+          if (!this.lastMarkReadCall) {
+            this.lastMarkReadCall = {};
+          }
+          this.lastMarkReadCall[rateLimitKey] = now;
+          
+          await this.markConversationMessagesAsSeen(socket, conversationId);
+          await this.updateConversationLastRead(socket, conversationId);
         } catch (error) {
           console.error('Error handling mark_conversation_read:', error);
         }
@@ -360,74 +376,76 @@ class SocketService {
       .filter(p => this.isUserOnline(p.user._id.toString()))
       .map(p => p.user._id.toString());
     
+    
     // Emit to all users in the conversation
     this.io.to(`conversation_${conversationId}`).emit('new_message', {
       conversationId,
       message: message.toObject()
     });
     
-    // Process delivery status for online users after a short delay
+    // Process delivery status for online users immediately
     if (onlineParticipants.length > 0) {
-      setTimeout(async () => {
-        await this.processMessageDelivery(message._id, onlineParticipants, socket.userId);
-      }, 200);
+      // Process delivery immediately for better real-time experience
+      await this.processMessageDelivery(message._id, onlineParticipants, socket.userId);
+    } else {
     }
     
-    console.log('🔧 Socket message created:', {
-      messageId: message._id,
-      senderId: message.sender._id,
-      senderName: message.sender.name,
-      socketUserId: socket.userId,
-      content: message.content,
-      status: message.status,
-      onlineRecipients: onlineParticipants.length
-    });
   }
 
   async processMessageDelivery(messageId, onlineUserIds, senderId) {
     const Message = require('../models/Message');
     
     try {
+      
       // Update message with delivered status for online users
       const message = await Message.findById(messageId);
-      if (!message) return;
+      if (!message) {
+        return;
+      }
       
-      const deliveredTo = onlineUserIds.map(userId => ({
-        user: userId,
-        deliveredAt: new Date()
-      }));
+      const deliveredTimestamp = new Date();
       
-      // Only update if there are users to deliver to
-      if (deliveredTo.length > 0) {
-        message.deliveredTo = deliveredTo;
-        message.status = 'delivered';
-        await message.save();
+      // Add each user to deliveredTo array (don't override existing)
+      for (const userId of onlineUserIds) {
+        const alreadyDelivered = message.deliveredTo.some(
+          d => d.user.toString() === userId
+        );
         
-        // Notify sender about delivery
-        this.sendNotificationToUser(senderId, 'message_status_update', {
-          messageId,
-          status: 'delivered',
-          deliveredTo: deliveredTo.map(d => d.user),
-          timestamp: new Date()
-        });
-        
-        console.log(`📦 Message ${messageId} delivered to ${deliveredTo.length} users`);
-        
-        // MODIFIED: Only auto-mark as seen for users who are actively viewing 
-        // AND have recent activity (not just connected)
-        const activeViewers = onlineUserIds.filter(userId => {
-          const isViewingConversation = this.activeChats.get(userId) === message.conversation.toString();
-          const lastActivity = this.userLastActivity.get(userId);
-          const isRecentlyActive = lastActivity && (Date.now() - lastActivity.getTime()) < 30000; // 30 seconds
-          
-          return isViewingConversation && isRecentlyActive;
-        });
-        
-        if (activeViewers.length > 0) {
-          setTimeout(() => {
-            this.processMessageSeen(messageId, activeViewers, senderId);
-          }, 2000); // Increased delay to 2 seconds
+        if (!alreadyDelivered) {
+          message.deliveredTo.push({
+            user: userId,
+            deliveredAt: deliveredTimestamp
+          });
         }
+      }
+      
+      // Update status to delivered if not already read
+      if (message.status !== 'read') {
+        message.status = 'delivered';
+      }
+      
+      await message.save();
+      
+      // Notify sender about delivery
+      const notificationSent = this.sendNotificationToUser(senderId, 'message_status_update', {
+        messageId,
+        status: message.status,
+        deliveredTo: message.deliveredTo,
+        timestamp: deliveredTimestamp
+      });
+      
+      
+      // IMMEDIATE: Mark as seen for users who are actively viewing the conversation
+      const activeViewers = onlineUserIds.filter(userId => {
+        const isViewingConversation = this.activeChats.get(userId) === message.conversation.toString();
+        return isViewingConversation;
+      });
+      
+      
+      
+      if (activeViewers.length > 0) {
+        // Mark as seen immediately for active viewers
+        await this.processMessageSeen(messageId, activeViewers, senderId);
       }
       
     } catch (error) {
@@ -464,7 +482,6 @@ class SocketService {
           timestamp: new Date()
         });
         
-        console.log(`👀 Message ${messageId} read by ${newReadBy.length} users (active viewers only)`);
       }
       
     } catch (error) {
@@ -510,7 +527,6 @@ class SocketService {
         timestamp: new Date()
       });
       
-      console.log(`📦 Message ${messageId} marked as delivered by ${socket.user.name}`);
     }
   }
 
@@ -560,7 +576,79 @@ class SocketService {
         timestamp: new Date()
       });
       
-      console.log(`👀 Message ${messageId} marked as read by ${socket.user.name}`);
+    }
+  }
+
+  async markUndeliveredMessagesAsDelivered(socket, conversationId) {
+    const Message = require('../models/Message');
+    
+    try {
+      // Find undelivered messages in conversation (not sent by current user)
+      const undeliveredMessages = await Message.find({
+        conversation: conversationId,
+        sender: { $ne: socket.userId },
+        'deliveredTo.user': { $ne: socket.userId },
+        isDeleted: { $ne: true }
+      });
+
+      if (undeliveredMessages.length > 0) {
+        const messageIds = undeliveredMessages.map(msg => msg._id);
+        
+        // Mark messages as delivered (add to deliveredTo array, don't override)
+        const deliveredTimestamp = new Date();
+        
+        for (const messageId of messageIds) {
+          const message = await Message.findById(messageId);
+          if (message) {
+            const alreadyDelivered = message.deliveredTo.some(
+              d => d.user.toString() === socket.userId
+            );
+            
+            if (!alreadyDelivered) {
+              message.deliveredTo.push({
+                user: socket.userId,
+                deliveredAt: deliveredTimestamp
+              });
+              
+              if (message.status !== 'read') {
+                message.status = 'delivered';
+              }
+              
+              await message.save();
+            }
+          }
+        }
+
+        // Emit delivery status updates to sender
+        for (const message of undeliveredMessages) {
+          const senderSocket = this.getUserSocket(message.sender.toString());
+          if (senderSocket) {
+            this.sendNotificationToUser(message.sender.toString(), 'message_status_update', {
+              messageId: message._id,
+              status: 'delivered',
+              timestamp: deliveredTimestamp,
+              deliveredTo: message.deliveredTo
+            });
+          }
+        }
+
+      }
+    } catch (error) {
+      console.error('Error marking messages as delivered:', error);
+    }
+  }
+
+  async updateConversationLastRead(socket, conversationId) {
+    const Conversation = require('../models/Conversation');
+    
+    try {
+      const conversation = await Conversation.findById(conversationId);
+      if (conversation) {
+        await conversation.markAsRead(socket.userId);
+      } else {
+      }
+    } catch (error) {
+      console.error('Error updating conversation lastRead:', error);
     }
   }
 
@@ -568,6 +656,7 @@ class SocketService {
     const Message = require('../models/Message');
     
     try {
+      
       // Find unread messages in conversation (not sent by current user)
       const unreadMessages = await Message.find({
         conversation: conversationId,
@@ -576,42 +665,34 @@ class SocketService {
         isDeleted: { $ne: true }
       });
       
+      
       if (unreadMessages.length === 0) {
-        console.log(`No unread messages to mark as seen for user ${socket.user.name} in conversation ${conversationId}`);
         return;
       }
       
       const readTimestamp = new Date();
-      const messageUpdates = [];
       
-      // Process each message
-      for (const message of unreadMessages) {
-        // Add to delivered list if not already there
-        const alreadyDelivered = message.deliveredTo.some(
-          d => d.user.toString() === socket.userId
-        );
-        
-        if (!alreadyDelivered) {
-          message.deliveredTo.push({
-            user: socket.userId,
-            deliveredAt: readTimestamp
-          });
+      // Process messages in bulk for better performance
+      const messageIds = unreadMessages.map(msg => msg._id);
+      const senderIds = [...new Set(unreadMessages.map(msg => msg.sender.toString()))];
+      
+      // Bulk update all messages at once for better performance
+      await Message.updateMany(
+        { _id: { $in: messageIds } },
+        {
+          $addToSet: {
+            deliveredTo: { user: socket.userId, deliveredAt: readTimestamp },
+            readBy: { user: socket.userId, readAt: readTimestamp }
+          },
+          $set: { status: 'read' }
         }
-        
-        // Add read status
-        message.readBy.push({
-          user: socket.userId,
-          readAt: readTimestamp
-        });
-        
-        message.status = 'read';
-        await message.save();
-        
-        messageUpdates.push({
-          messageId: message._id,
-          senderId: message.sender
-        });
-      }
+      );
+      
+      // Create message updates for notifications
+      const messageUpdates = unreadMessages.map(message => ({
+        messageId: message._id,
+        senderId: message.sender
+      }));
       
       // Update user activity
       this.userLastActivity.set(socket.userId, readTimestamp);
@@ -634,7 +715,6 @@ class SocketService {
         });
       });
       
-      console.log(`👀 EXPLICITLY marked ${unreadMessages.length} messages as seen in conversation ${conversationId} by ${socket.user.name}`);
       
     } catch (error) {
       console.error('Error marking conversation messages as seen:', error);

@@ -57,7 +57,6 @@ const ChatHeader = ({
     if (activeChat?.type === 'direct') {
       const newBlockedStatus = getBlockedStatus(activeChat, currentUser);
       setLocalBlockedStatus(newBlockedStatus);
-      console.log('ChatHeader: Blocked status updated', newBlockedStatus);
     }
   }, [activeChat, currentUser?.blockedUsers, activeChat?.participants]);
 
@@ -201,7 +200,6 @@ const isCurrentUserAdmin = (conversation) => {
 
       // Determine status based on blocked state
       let status;
-      console.log("User blocked Info", blockedStatus, blockedStatus.isBlocked)
       if (blockedStatus.isBlocked) {
         if (blockedStatus.blockedByCurrentUser) {
           status = "You blocked this user";

@@ -21,7 +21,7 @@ import {
   Shield,
   Bell
 } from "lucide-react";
-import { formatTime, getUnreadCount} from "../utils/helpers";
+import { formatTime } from "../utils/helpers";
 import { getSidebarPreviewText, shouldShowMessageSender } from "../utils/fileHelpers";
 import { useUser } from "../contexts/UserContext";
 import DeleteModal from "./Modals/DeleteModal";
@@ -566,7 +566,8 @@ const getLastMessagePreview = (conversation) => {
     const blockedStatus = getBlockedStatus(conv, currentUser);
     if (blockedStatus.isBlocked) return total;
     
-    return total + getUnreadCount(conv);
+    // Use the unreadCount from backend API instead of calculating
+    return total + (conv.unreadCount || 0);
   }, 0);
 
   // Handle new chat menu
@@ -908,10 +909,9 @@ const getLastMessagePreview = (conversation) => {
           {!searchQuery && sortedConversations.map((conversation) => {
             const convInfo = getConversationInfo(conversation);
             const messageSender = getMessageSender(conversation);
-            const unreadCount = getUnreadCount(conversation);
+            const unreadCount = conversation.unreadCount || 0; // Use backend unread count
             const isActive = activeChat?._id === conversation._id;
             const lastMessagePreview = getLastMessagePreview(conversation);
-            console.log("Message", conversation.lastMessage, lastMessagePreview);
             const blockedStatus = getBlockedStatus(conversation, currentUser);
 
             return (

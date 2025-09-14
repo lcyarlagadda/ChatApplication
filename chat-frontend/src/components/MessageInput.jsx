@@ -266,11 +266,6 @@ const MessageInput = ({
   }, []);
 
 const blockingStatus = useMemo(() => {
-  console.log("🔄 Recalculating blocking status...", {
-    activeChat: activeChat?._id,
-    currentUser: currentUser?._id,
-    blockedUsers: currentUser?.blockedUsers,
-  });
 
   if (!activeChat || !currentUser) return { isBlocked: false, reason: null };
 

@@ -269,10 +269,15 @@ const ChatArea = ({
     }
   };
 
-  // Effect to handle conversation viewing
+  // Effect to handle conversation viewing with debounce
   useEffect(() => {
     if (activeChat && onConversationViewed) {
-      onConversationViewed(activeChat._id);
+      // Add a longer delay to debounce rapid conversation switches
+      const timer = setTimeout(() => {
+        onConversationViewed(activeChat._id);
+      }, 500); // Increased from 100ms to 500ms
+      
+      return () => clearTimeout(timer);
     }
   }, [activeChat?._id, onConversationViewed]);
 

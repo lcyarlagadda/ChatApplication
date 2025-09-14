@@ -77,6 +77,49 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+// GET /api/conversations/unread-counts - Get unread counts for all conversations
+router.get('/unread-counts', auth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Get all conversations where user is a participant
+    const conversations = await Conversation.find({
+      'participants.user': userId
+    }).select('_id participants');
+
+
+    if (conversations.length === 0) {
+      return res.json({
+        success: true,
+        unreadCounts: {}
+      });
+    }
+
+    // Calculate unread counts for each conversation
+    const unreadCounts = {};
+    
+    await Promise.all(conversations.map(async (conv) => {
+      const count = await conv.getUnreadCount(userId);
+      unreadCounts[conv._id.toString()] = count;
+    }));
+
+
+    res.json({
+      success: true,
+      unreadCounts,
+      totalConversations: conversations.length,
+      conversationsWithUnread: Object.values(unreadCounts).filter(count => count > 0).length
+    });
+
+  } catch (error) {
+    console.error('Get unread counts error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching unread counts'
+    });
+  }
+});
+
 // GET /api/conversations/:id - Get specific conversation
 router.get('/:id', async (req, res) => {
   try {
@@ -128,14 +171,6 @@ router.post('/', async (req, res) => {
   try {
     const { type, name, description, participants, avatar, admins = [], isBroadcast } = req.body;
     const userId = req.user.id;
-    
-    console.log('Creating conversation:', {
-      type,
-      name,
-      creator: req.user.name,
-      participantCount: participants?.length || 0,
-      adminCount: admins?.length || 0
-    });
     
     // Validation
     if (!type || !['direct', 'group', 'broadcast'].includes(type)) {
@@ -241,13 +276,6 @@ router.post('/', async (req, res) => {
         timestamp: systemMessage.createdAt,
         messageType: 'system'
       });
-      
-      console.log('✅ Group created:', {
-        id: conversation._id,
-        name: conversation.name,
-        participantCount: conversation.participants.length,
-        adminCount: (conversation.admins?.length || 0) + 1
-      });
     }
 
     // Handle broadcast conversations
@@ -281,13 +309,6 @@ router.post('/', async (req, res) => {
         sender: systemMessage.sender._id,
         timestamp: systemMessage.createdAt,
         messageType: 'system'
-      });
-      
-      console.log('📢 Broadcast channel created:', {
-        id: conversation._id,
-        name: conversation.name,
-        subscriberCount: conversation.participants.length,
-        adminCount: (conversation.admins?.length || 0) + 1
       });
     }
 
@@ -794,12 +815,7 @@ router.delete('/:id', async (req, res) => {
     
     // Delete conversation
     await Conversation.findByIdAndDelete(id);
-    
-    console.log(`🗑️ ${conversation.type} conversation deleted:`, {
-      id,
-      name: conversation.name,
-      deletedBy: req.user.name
-    });
+
     
     res.json({
       success: true,
@@ -1162,46 +1178,6 @@ router.get('/:id/participants', async (req, res) => {
   }
 });
 
-// GET /api/conversations/unread-counts - Get unread counts for all conversations
-router.get('/unread-counts', async (req, res) => {
-  try {
-    const userId = req.user.id;
-    
-    // Get all conversations where user is a participant
-    const conversations = await Conversation.find({
-      'participants.user': userId
-    }).select('_id participants');
-
-    if (conversations.length === 0) {
-      return res.json({
-        success: true,
-        unreadCounts: {}
-      });
-    }
-
-    // Calculate unread counts for each conversation
-    const unreadCounts = {};
-    
-    await Promise.all(conversations.map(async (conv) => {
-      const count = await conv.getUnreadCount(userId);
-      unreadCounts[conv._id.toString()] = count;
-    }));
-
-    res.json({
-      success: true,
-      unreadCounts,
-      totalConversations: conversations.length,
-      conversationsWithUnread: Object.values(unreadCounts).filter(count => count > 0).length
-    });
-
-  } catch (error) {
-    console.error('Get unread counts error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while fetching unread counts'
-    });
-  }
-});
 
 // ENHANCED: Clear chat messages for one user only
 router.post('/:conversationId/clear', auth, async (req, res) => {
@@ -1362,7 +1338,6 @@ router.post('/:conversationId/leave', auth, async (req, res) => {
           newAdminParticipant.role = 'admin';
         }
         
-        console.log(`👑 Admin transferred from ${user.name} to ${newAdminUser.name} (${transferReason})`);
       }
     }
 

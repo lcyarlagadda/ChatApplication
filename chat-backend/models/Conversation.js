@@ -124,9 +124,21 @@ conversationSchema.methods.unhideFor = function(userId) {
 // Get unread count for a user
 conversationSchema.methods.getUnreadCount = async function(userId) {
   const Message = mongoose.model('Message');
-  const participant = this.participants.find(p => p.user?._id?.toString() === userId.toString());
   
-  if (!participant) return 0;
+  // Handle both populated and non-populated participants
+  const participant = this.participants.find(p => {
+    if (p.user && typeof p.user === 'object') {
+      // If user is populated (has _id property)
+      return p.user._id && p.user._id.toString() === userId.toString();
+    } else {
+      // If user is just an ObjectId
+      return p.user && p.user.toString() === userId.toString();
+    }
+  });
+  
+  if (!participant) {
+    return 0;
+  }
   
   const count = await Message.countDocuments({
     conversation: this._id,
@@ -142,6 +154,7 @@ conversationSchema.methods.getUnreadCount = async function(userId) {
 conversationSchema.methods.markAsRead = function(userId) {
   const participant = this.participants.find(p => p.user.toString() === userId.toString());
   if (participant) {
+    const oldLastRead = participant.lastRead;
     participant.lastRead = new Date();
     return this.save();
   }
