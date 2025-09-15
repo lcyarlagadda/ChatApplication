@@ -73,7 +73,6 @@ class SocketService {
   joinUserRoom(userId) {
     if (this.socket && userId) {
       this.socket.emit('join_user_room', userId);
-      console.log("Joining room", userId);
     }
   }
 

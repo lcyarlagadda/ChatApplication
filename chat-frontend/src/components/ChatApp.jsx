@@ -1428,12 +1428,16 @@ const ChatApp = () => {
         throw new Error(result.message || "Failed to send message");
       }
 
-      // Update message status to sent
+      // Update message status to sent (only if not already updated by socket events)
       setMessages((prev) => ({
         ...prev,
         [conversationId]: prev[conversationId].map((msg) =>
           msg._id === messageId
-            ? { ...msg, status: "sent", createdAt: result.data.createdAt }
+            ? { 
+                ...msg, 
+                status: msg.status === "sending" ? "sent" : msg.status, // Don't override delivered/read
+                createdAt: result.data.createdAt 
+              }
             : msg
         ),
       }));
@@ -1528,12 +1532,16 @@ const ChatApp = () => {
         throw new Error(result.message || "Failed to send file message");
       }
 
-      // Update message status
+      // Update message status (only if not already updated by socket events)
       setMessages((prev) => ({
         ...prev,
         [conversationId]: prev[conversationId].map((msg) =>
           msg._id === messageId
-            ? { ...msg, status: "sent", createdAt: result.data.createdAt }
+            ? { 
+                ...msg, 
+                status: msg.status === "sending" ? "sent" : msg.status, // Don't override delivered/read
+                createdAt: result.data.createdAt 
+              }
             : msg
         ),
       }));

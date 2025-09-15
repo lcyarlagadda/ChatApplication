@@ -134,6 +134,9 @@ class SocketService {
         try {
           const { conversationId } = data;
           
+          // Update active chat tracking
+          this.activeChats.set(socket.userId, conversationId);
+          
           // Update last activity time
           this.userLastActivity.set(socket.userId, new Date());
           
@@ -177,6 +180,10 @@ class SocketService {
       socket.on('mark_conversation_read', async (data) => {
         try {
           const { conversationId } = data;
+          
+          // Update active chat tracking
+          this.activeChats.set(socket.userId, conversationId);
+          
           const rateLimitKey = `${socket.userId}_${conversationId}`;
           const now = Date.now();
           
@@ -441,8 +448,6 @@ class SocketService {
         return isViewingConversation;
       });
       
-      
-      
       if (activeViewers.length > 0) {
         // Mark as seen immediately for active viewers
         await this.processMessageSeen(messageId, activeViewers, senderId);
@@ -481,7 +486,6 @@ class SocketService {
           readBy: message.readBy.map(s => ({ user: s.user, readAt: s.readAt })),
           timestamp: new Date()
         });
-        
       }
       
     } catch (error) {
@@ -656,25 +660,29 @@ class SocketService {
     const Message = require('../models/Message');
     
     try {
-      
       // Find unread messages in conversation (not sent by current user)
       const unreadMessages = await Message.find({
         conversation: conversationId,
         sender: { $ne: socket.userId },
-        'readBy.user': { $ne: socket.userId },
         isDeleted: { $ne: true }
       });
       
+      // Filter out messages that are already read by this user
+      const filteredUnreadMessages = unreadMessages.filter(message => {
+        return !message.readBy.some(readEntry => 
+          readEntry.user.toString() === socket.userId
+        );
+      });
       
-      if (unreadMessages.length === 0) {
+      if (filteredUnreadMessages.length === 0) {
         return;
       }
       
       const readTimestamp = new Date();
       
       // Process messages in bulk for better performance
-      const messageIds = unreadMessages.map(msg => msg._id);
-      const senderIds = [...new Set(unreadMessages.map(msg => msg.sender.toString()))];
+      const messageIds = filteredUnreadMessages.map(msg => msg._id);
+      const senderIds = [...new Set(filteredUnreadMessages.map(msg => msg.sender.toString()))];
       
       // Bulk update all messages at once for better performance
       await Message.updateMany(
@@ -689,7 +697,7 @@ class SocketService {
       );
       
       // Create message updates for notifications
-      const messageUpdates = unreadMessages.map(message => ({
+      const messageUpdates = filteredUnreadMessages.map(message => ({
         messageId: message._id,
         senderId: message.sender
       }));
