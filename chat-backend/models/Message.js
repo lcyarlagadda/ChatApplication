@@ -75,6 +75,10 @@ const messageSchema = new mongoose.Schema({
       default: Date.now
     }
   }],
+  clearedFor: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
   reactions: [{
     user: {
       type: mongoose.Schema.Types.ObjectId,

@@ -1054,6 +1054,29 @@ const ChatApp = () => {
 
       showNotification("Chat cleared", "info");
     });
+
+    // Handle conversation hidden
+    socketService.onConversationHidden((data) => {
+      const { conversationId } = data;
+      
+      // Hide conversation from sidebar
+      updateConversations(prevConversations => 
+        prevConversations.filter(conv => conv._id !== conversationId)
+      );
+      
+      // Clear active chat if it's the hidden conversation
+      if (activeChat?._id === conversationId) {
+        setActiveChat(null);
+      }
+    });
+
+    // Handle conversation reappeared
+    socketService.onConversationReappeared((data) => {
+      const { conversationId } = data;
+      
+      // Fetch the conversation details and add it back to the list
+      fetchConversationDetails(conversationId);
+    });
   };
 
   const cleanupSocketListeners = () => {
@@ -1262,6 +1285,30 @@ const ChatApp = () => {
       }
     } catch (error) {
       console.error("Error refreshing unread counts:", error);
+    }
+  };
+
+  const fetchConversationDetails = async (conversationId) => {
+    try {
+      const response = await sessionManager.authenticatedRequest(`/conversations/${conversationId}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          // Add the conversation back to the list
+          updateConversations(prevConversations => {
+            const exists = prevConversations.find(conv => conv._id === conversationId);
+            if (exists) {
+              return prevConversations.map(conv => 
+                conv._id === conversationId ? data.conversation : conv
+              );
+            } else {
+              return [data.conversation, ...prevConversations];
+            }
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch conversation details:", error);
     }
   };
 
@@ -2224,6 +2271,44 @@ const ChatApp = () => {
     }
   };
 
+  const handleHideChat = async (conversationId) => {
+    try {
+      window.lastUserInteraction = Date.now();
+
+      const response = await sessionManager.authenticatedRequest(
+        `/conversations/${conversationId}/hide`,
+        {
+          method: "POST",
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Hide conversation from the sidebar
+        updateConversations(prevConversations => 
+          prevConversations.filter(conv => conv._id !== conversationId)
+        );
+        
+        // Clear active chat if it's the hidden conversation
+        if (activeChat?._id === conversationId) {
+          setActiveChat(null);
+        }
+        
+        showNotification("Conversation hidden. It will reappear when someone sends a new message.", "success");
+      } else {
+        throw new Error(result.message || "Failed to hide conversation");
+      }
+    } catch (error) {
+      console.error("Failed to hide conversation:", error);
+      showNotification(
+        error.message || "Failed to hide conversation. Please try again.",
+        "error"
+      );
+      throw error;
+    }
+  };
+
   const handleBlockUser = async (userId) => {
     try {
       // Update user interaction timestamp
@@ -2549,6 +2634,7 @@ const ChatApp = () => {
         onRemoveParticipant={handleRemoveParticipant}
         onUpdateConversation={handleConversationUpdate}
         onClearChat={handleClearChat}
+        onHideChat={handleHideChat}
         onBlockUser={handleBlockUser}
         onLeaveConversation={handleLeaveConversation}
       />

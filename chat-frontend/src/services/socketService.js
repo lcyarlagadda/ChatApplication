@@ -352,6 +352,18 @@ class SocketService {
     }
   }
 
+  onConversationHidden(callback) {
+    if (this.socket) {
+      this.socket.on('conversation_hidden', callback);
+    }
+  }
+
+  onConversationReappeared(callback) {
+    if (this.socket) {
+      this.socket.on('conversation_reappeared', callback);
+    }
+  }
+
   onAdminRemoved(callback) {
     if (this.socket) {
       this.socket.on('admin_removed', callback);

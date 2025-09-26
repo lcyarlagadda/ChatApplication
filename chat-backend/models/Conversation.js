@@ -35,6 +35,14 @@ const conversationSchema = new mongoose.Schema({
     lastRead: {
       type: Date,
       default: Date.now
+    },
+    isHidden: {
+      type: Boolean,
+      default: false
+    },
+    hiddenAt: {
+      type: Date,
+      default: null
     }
   }],
   hiddenFor: [{

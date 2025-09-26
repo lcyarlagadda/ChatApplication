@@ -1,7 +1,17 @@
 {
   "short_name": "Chat App",
-  "name": "Create React App Sample",
+  "name": "Chat App",
   "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "logo192.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192"
+    }
   ],
   "start_url": ".",
   "display": "standalone",

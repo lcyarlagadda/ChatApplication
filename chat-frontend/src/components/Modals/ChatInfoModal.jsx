@@ -115,6 +115,8 @@ const ChatInfoModal = ({
   onRemoveParticipant,
   onAddAdmin,
   onRemoveAdmin,
+  onClearChat,
+  onHideChat,
 }) => {
   const [activeTab, setActiveTab] = useState("info");
   const [isEditing, setIsEditing] = useState(false);
@@ -206,6 +208,43 @@ const isUserAdmin = (userId) => {
     } catch (error) {
       console.error("Failed to update conversation:", error);
     }
+  };
+
+  const handleClearChat = async () => {
+    showConfirmation({
+      title: "Clear Chat",
+      message: "Are you sure you want to clear all messages in this chat? This will only clear the chat for you - other participants will still see all messages.",
+      confirmText: "Clear Chat",
+      cancelText: "Cancel",
+      type: "warning",
+      onConfirm: async () => {
+        try {
+          await onClearChat(conversation._id);
+        } catch (error) {
+          console.error("Failed to clear chat:", error);
+        }
+        hideConfirmation();
+      },
+    });
+  };
+
+  const handleHideChat = async () => {
+    showConfirmation({
+      title: "Hide Chat",
+      message: "Are you sure you want to hide this conversation? It will disappear from your sidebar but will reappear when someone sends a new message.",
+      confirmText: "Hide Chat",
+      cancelText: "Cancel",
+      type: "warning",
+      onConfirm: async () => {
+        try {
+          await onHideChat(conversation._id);
+          onClose();
+        } catch (error) {
+          console.error("Failed to hide chat:", error);
+        }
+        hideConfirmation();
+      },
+    });
   };
 
   const handleDeleteConversation = async () => {
@@ -1025,6 +1064,32 @@ const isUserAdmin = (userId) => {
                           </div>
                         ) : null;
                       })}
+                  </div>
+                </div>
+
+                {/* Chat Actions */}
+                <div className="p-4 rounded-lg border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/20">
+                  <h3 className="font-medium text-gray-800 dark:text-gray-200 mb-3 flex items-center space-x-2">
+                    <Settings className="w-4 h-4" />
+                    <span>Chat Actions</span>
+                  </h3>
+                  
+                  <div className="space-y-2">
+                    <button
+                      onClick={handleClearChat}
+                      className="w-full flex items-center space-x-2 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Clear Chat</span>
+                    </button>
+                    
+                    <button
+                      onClick={handleHideChat}
+                      className="w-full flex items-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                    >
+                      <UserMinus className="w-4 h-4" />
+                      <span>Hide Chat</span>
+                    </button>
                   </div>
                 </div>
 

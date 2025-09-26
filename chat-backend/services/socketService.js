@@ -389,6 +389,9 @@ class SocketService {
       conversationId,
       message: message.toObject()
     });
+
+    // Make hidden conversations reappear for all participants when new message arrives
+    await this.makeHiddenConversationReappear(conversationId, senderId);
     
     // Process delivery status for online users immediately
     if (onlineParticipants.length > 0) {
@@ -653,6 +656,43 @@ class SocketService {
       }
     } catch (error) {
       console.error('Error updating conversation lastRead:', error);
+    }
+  }
+
+  async makeHiddenConversationReappear(conversationId, senderId) {
+    const Conversation = require('../models/Conversation');
+    
+    try {
+      const conversation = await Conversation.findById(conversationId);
+      if (!conversation) return;
+      
+      // Find all participants who have hidden this conversation
+      const hiddenParticipants = conversation.participants.filter(
+        p => p.isHidden === true
+      );
+      
+      if (hiddenParticipants.length === 0) return;
+      
+      // Make conversation reappear for all hidden participants
+      for (const participant of hiddenParticipants) {
+        participant.isHidden = false;
+        participant.hiddenAt = null;
+        
+        // Notify the user that the conversation has reappeared
+        this.sendNotificationToUser(
+          participant.user.toString(),
+          'conversation_reappeared',
+          {
+            conversationId: conversation._id,
+            senderId: senderId,
+            timestamp: new Date()
+          }
+        );
+      }
+      
+      await conversation.save();
+    } catch (error) {
+      console.error('Error making hidden conversation reappear:', error);
     }
   }
 

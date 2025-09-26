@@ -39,8 +39,11 @@ router.get('/:conversationId', auth, async (req, res) => {
       });
     }
 
-    // Get messages with pagination (newest first)
-    const messages = await Message.find({ conversation: conversationId })
+    // Get messages with pagination (newest first), excluding cleared messages for this user
+    const messages = await Message.find({ 
+      conversation: conversationId,
+      clearedFor: { $ne: req.user.id }
+    })
   .populate('sender', '_id name email avatar')
   .populate({
     path: 'replyTo',

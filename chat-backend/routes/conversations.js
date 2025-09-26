@@ -21,7 +21,11 @@ router.get('/', auth, async (req, res) => {
     const user = await User.findById(userId).populate('blockedUsers');
     
     const conversations = await Conversation.find({
-      'participants.user': userId
+      'participants.user': userId,
+      $or: [
+        { 'participants.isHidden': { $exists: false } },
+        { 'participants.isHidden': false }
+      ]
     })
     .populate({
       path: 'participants.user',
@@ -31,6 +35,7 @@ router.get('/', auth, async (req, res) => {
     .populate('admins', 'name email avatar')
     .populate({
       path: 'lastMessage',
+      select: 'content messageType file sender createdAt clearedFor',
       populate: {
         path: 'sender',
         select: 'name avatar'
@@ -38,8 +43,8 @@ router.get('/', auth, async (req, res) => {
     })
     .sort({ updatedAt: -1 });
 
-    // Add blocked status to conversations
-    const conversationsWithBlockStatus = conversations.map(conv => {
+    // Add blocked status to conversations and handle cleared messages
+    const conversationsWithBlockStatus = await Promise.all(conversations.map(async (conv) => {
       const convObj = conv.toObject();
       
       if (convObj.type === 'direct') {
@@ -60,8 +65,23 @@ router.get('/', auth, async (req, res) => {
         }
       }
       
+      // Check if all messages in this conversation have been cleared for this user
+      const Message = require('../models/Message');
+      const remainingMessages = await Message.countDocuments({
+        conversation: convObj._id,
+        clearedFor: { $ne: userId }
+      });
+      
+      // If no messages remain for this user, set lastMessage to null
+      if (remainingMessages === 0) {
+        convObj.lastMessage = null;
+      } else if (convObj.lastMessage && convObj.lastMessage.clearedFor && convObj.lastMessage.clearedFor.some(clearedUserId => clearedUserId.toString() === userId.toString())) {
+        // If the last message specifically has been cleared, set it to null
+        convObj.lastMessage = null;
+      }
+      
       return convObj;
-    });
+    }));
 
     res.json({
       success: true,
@@ -1216,13 +1236,14 @@ router.post('/:conversationId/clear', auth, async (req, res) => {
       }
     );
 
-    // Update the participant's lastCleared timestamp
+    // Update the participant's lastRead timestamp and check if conversation should show as empty
     const participant = conversation.participants.find(
       p => p.user.toString() === userId.toString()
     );
     
     if (participant) {
-      participant.lastCleared = new Date();
+      participant.lastRead = new Date();
+      
       await conversation.save();
     }
 
@@ -1244,6 +1265,66 @@ router.post('/:conversationId/clear', auth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while clearing chat'
+    });
+  }
+});
+
+// Hide conversation (user-specific) - makes it reappear when new messages arrive
+router.post('/:conversationId/hide', auth, async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const userId = req.user._id;
+
+    // Find the conversation
+    const conversation = await Conversation.findById(conversationId).populate('participants.user');
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Conversation not found'
+      });
+    }
+
+    // Check if user is a participant
+    const isParticipant = conversation.participants.some(
+      p => p.user._id.toString() === userId.toString()
+    );
+
+    if (!isParticipant) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to hide this conversation'
+      });
+    }
+
+    // Mark conversation as hidden for this user
+    const participant = conversation.participants.find(
+      p => p.user._id.toString() === userId.toString()
+    );
+    
+    if (participant) {
+      participant.isHidden = true;
+      participant.hiddenAt = new Date();
+      await conversation.save();
+    }
+
+    // Emit socket event to notify only this user
+    if (req.socketService) {
+      req.socketService.sendNotificationToUser(userId.toString(), 'conversation_hidden', {
+        conversationId,
+        timestamp: new Date()
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Conversation hidden. It will reappear when someone sends a new message.'
+    });
+
+  } catch (error) {
+    console.error('Hide conversation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while hiding conversation'
     });
   }
 });
