@@ -1,4 +1,6 @@
 // utils/sessionManager.js
+import API_CONFIG from '../api/config.js';
+
 class SessionManager {
   constructor() {
     this.accessTokenKey = 'chatapp_access_token';
@@ -22,8 +24,7 @@ class SessionManager {
   // Send email verification code for login
   async sendLoginVerificationCode(email) {
     try {
-      let baseUrl = 'http://localhost:5000/api';
-      const response = await fetch(`${baseUrl}/auth/send-login-code`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/auth/send-login-code`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -55,8 +56,7 @@ class SessionManager {
   // Verify login code and complete authentication
   async verifyLoginCode(email, code) {
     try {
-      let baseUrl = 'http://localhost:5000/api';
-      const response = await fetch(`${baseUrl}/auth/verify-login-code`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/auth/verify-login-code`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -86,8 +86,7 @@ class SessionManager {
   // Send email verification code for registration
   async sendRegistrationVerificationCode(userData) {
     try {
-      let baseUrl = 'http://localhost:5000/api';
-      const response = await fetch(`${baseUrl}/auth/send-registration-code`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/auth/send-registration-code`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -124,8 +123,7 @@ class SessionManager {
         throw new Error('No pending registration found');
       }
 
-      let baseUrl = 'http://localhost:5000/api';
-      const response = await fetch(`${baseUrl}/auth/verify-registration-code`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/auth/verify-registration-code`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -165,8 +163,7 @@ class SessionManager {
   // Send password reset code
   async sendPasswordResetCode(email) {
     try {
-      let baseUrl = 'http://localhost:5000/api';
-      const response = await fetch(`${baseUrl}/auth/send-reset-code`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/auth/send-reset-code`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -198,8 +195,7 @@ class SessionManager {
   // Verify reset code and update password
   async verifyPasswordResetCode(email, code, newPassword) {
     try {
-      let baseUrl = 'http://localhost:5000/api';
-      const response = await fetch(`${baseUrl}/auth/verify-reset-code`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/auth/verify-reset-code`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -230,7 +226,6 @@ class SessionManager {
         throw new Error('No pending verification found');
       }
 
-      let baseUrl = 'http://localhost:5000/api';
       let endpoint;
       let body;
 
@@ -257,7 +252,7 @@ class SessionManager {
           throw new Error('Invalid verification type');
       }
 
-      const response = await fetch(`${baseUrl}${endpoint}`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -320,8 +315,7 @@ class SessionManager {
   // Check if user exists (for login vs registration flow)
   async checkUserExists(email) {
     try {
-      let baseUrl = 'http://localhost:5000/api';
-      const response = await fetch(`${baseUrl}/auth/check-user`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/auth/check-user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -454,8 +448,7 @@ class SessionManager {
     }
 
     try {
-      let baseUrl = 'http://localhost:5000/api';
-      const response = await fetch(`${baseUrl}/auth/refresh-token`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/auth/refresh-token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -500,8 +493,15 @@ class SessionManager {
       throw new Error('No access token available');
     }
 
-    let baseUrl = 'http://localhost:5000/api';
-    const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
+    // Ensure proper URL construction without double slashes
+    let fullUrl;
+    if (url.startsWith('http')) {
+      fullUrl = url;
+    } else {
+      const baseUrl = API_CONFIG.BASE_URL.endsWith('/') ? API_CONFIG.BASE_URL.slice(0, -1) : API_CONFIG.BASE_URL;
+      const path = url.startsWith('/') ? url : '/' + url;
+      fullUrl = `${baseUrl}${path}`;
+    }
 
     // Add authorization header
     const headers = {
