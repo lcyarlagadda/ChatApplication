@@ -2,7 +2,7 @@
 
 A modern, full-stack real-time chat application built with React, Node.js, Express, MongoDB, and Socket.IO. Features include direct messaging, group chats, broadcast channels, file sharing, message reactions, and comprehensive user management.
 
-## 🚀 Features
+## Features
 
 ### Core Chat Features
 - **Real-time Messaging**: Instant message delivery with Socket.IO
@@ -248,7 +248,7 @@ For email functionality (verification and password reset), you'll need to config
 2. Get your cloud name, API key, and API secret from the dashboard
 3. Add these credentials to your backend `.env` file
 
-## 📚 API Documentation
+## API Documentation
 
 ### Authentication Endpoints
 
@@ -332,7 +332,7 @@ For email functionality (verification and password reset), you'll need to config
 | `conversation_updated` | Conversation updated | `{ conversation, updateType }` |
 | `conversation_deleted` | Conversation deleted | `{ conversationId, deletedBy }` |
 
-## 🎨 UI Components
+## UI Components
 
 ### Main Components
 
@@ -402,30 +402,9 @@ For email functionality (verification and password reset), you'll need to config
    - Or deploy to platforms like Vercel, Netlify, or AWS S3
 
 ### Database Setup
-
-1. **MongoDB Atlas** (Recommended for production):
-   - Create a MongoDB Atlas cluster
-   - Get the connection string
-   - Update `MONGODB_URI` in your environment variables
-
-2. **Local MongoDB**:
    - Install MongoDB on your server
    - Configure authentication and security
    - Update connection string accordingly
-
-## 🧪 Testing
-
-### Backend Testing
-```bash
-cd backend/chat-backend
-npm test
-```
-
-### Frontend Testing
-```bash
-cd frontend/chat-frontend
-npm test
-```
 
 ## Scripts
 
@@ -452,27 +431,6 @@ npm test
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-If you encounter any issues or have questions:
-
-1. Check the [Issues](https://github.com/your-repo/issues) page
-2. Create a new issue with detailed information
-3. Include error messages, steps to reproduce, and environment details
-
-## 🔮 Future Enhancements
-
-- [ ] Voice and video calling
-- [ ] Message encryption
-- [ ] Push notifications
-- [ ] Message scheduling
-- [ ] Advanced search with filters
-- [ ] Message translation
-- [ ] Bot integration
-- [ ] Custom themes
-- [ ] Message templates
-- [ ] Advanced admin controls
 
 ## Performance Considerations
 
