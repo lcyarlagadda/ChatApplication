@@ -435,7 +435,7 @@ const loadMoreMessages = async () => {
               
               return (
                 <div
-                  key={message._id || message.id || index}
+                  key={`${message._id || message.id || 'temp'}-${index}`}
                   ref={(el) => setMessageRef(message._id, el)}
                   className={isHighlighted ? 'highlighted-message' : ''}
                   id={`message-${message._id}`}

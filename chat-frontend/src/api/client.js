@@ -170,7 +170,7 @@ class ApiClient {
       // Use sessionManager's authenticated request for automatic token handling
       try {
         const response = await this.sessionManager.authenticatedRequest(
-          this.buildUrl(endpoint),
+          endpoint,
           options
         );
         

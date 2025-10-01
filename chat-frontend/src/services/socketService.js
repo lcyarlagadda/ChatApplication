@@ -298,6 +298,12 @@ class SocketService {
     }
   }
 
+  onUserProfileUpdate(callback) {
+    if (this.socket) {
+      this.socket.on('user_profile_updated', callback);
+    }
+  }
+
   onConversationUpdate(callback) {
     if (this.socket) {
       this.socket.on('conversation_updated', callback);
@@ -360,7 +366,16 @@ class SocketService {
 
   onConversationReappeared(callback) {
     if (this.socket) {
-      this.socket.on('conversation_reappeared', callback);
+      this.socket.on('conversation_reappeared', (data) => {
+        console.log('🔔 SOCKET: Received conversation_reappeared event:', data);
+        callback(data);
+      });
+    }
+  }
+
+  onConversationDeleted(callback) {
+    if (this.socket) {
+      this.socket.on('conversation_deleted', callback);
     }
   }
 

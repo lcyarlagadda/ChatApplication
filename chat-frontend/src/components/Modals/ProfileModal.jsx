@@ -1,20 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Camera, Phone, MessageSquare, Edit2, Save, X, Loader2 } from 'lucide-react';
+import { ArrowLeft, Phone, MessageSquare, Edit2, Save, X, Loader2, Check } from 'lucide-react';
 import { useUser } from '../../contexts/UserContext';
 import { usersService } from '../../api/users';
+
+// Default avatar options
+const DEFAULT_AVATARS = [
+  '👤', '👨', '👩', '🧑', '👨‍💼', '👩‍💼', '👨‍🎓', '👩‍🎓',
+  '👨‍🔬', '👩‍🔬', '👨‍💻', '👩‍💻', '👨‍🎨', '👩‍🎨', '👨‍🚀', '👩‍🚀',
+  '🤴', '👸', '🦸', '🦸‍♀️', '🧙', '🧙‍♀️', '🧚', '🧚‍♀️',
+  '🎭', '🎪', '🎨', '🎵', '🎸', '🎹', '🎺', '🎻',
+  '⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🏉', '🎱',
+  '🌍', '🌎', '🌏', '🌙', '⭐', '🌟', '💫', '✨',
+  '🔥', '💎', '🎯', '🎲', '🎮', '🕹️', '🎊', '🎉'
+];
 
 const ProfileModal = ({ user, onClose }) => {
   const { currentUser, updateUserProfile, isDark } = useUser();
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [currentUserData, setCurrentUserData] = useState(user);
   const [editedUser, setEditedUser] = useState({
     name: user.name || '',
     email: user.email || '',
     bio: user.bio || '',
     phone: user.phone || '',
-    status: user.status || 'online'
+    status: user.status || 'online',
+    avatar: user.avatar || ''
   });
 
   // Update currentUserData when user prop changes
@@ -25,7 +38,8 @@ const ProfileModal = ({ user, onClose }) => {
       email: user.email || '',
       bio: user.bio || '',
       phone: user.phone || '',
-      status: user.status || 'online'
+      status: user.status || 'online',
+      avatar: user.avatar || ''
     });
   }, [user]);
 
@@ -41,6 +55,7 @@ const ProfileModal = ({ user, onClose }) => {
       if (editedUser.bio !== currentUserData.bio) updateData.bio = editedUser.bio;
       if (editedUser.phone !== currentUserData.phone) updateData.phone = editedUser.phone;
       if (editedUser.status !== currentUserData.status) updateData.status = editedUser.status;
+      if (editedUser.avatar !== currentUserData.avatar) updateData.avatar = editedUser.avatar;
 
       // Only make API call if there are changes
       if (Object.keys(updateData).length > 0) {
@@ -74,10 +89,12 @@ const ProfileModal = ({ user, onClose }) => {
       email: currentUserData.email || '',
       bio: currentUserData.bio || '',
       phone: currentUserData.phone || '',
-      status: currentUserData.status || 'online'
+      status: currentUserData.status || 'online',
+      avatar: currentUserData.avatar || ''
     });
     setError('');
     setIsEditing(false);
+    setShowAvatarPicker(false);
   };
 
   const handleInputChange = (field, value) => {
@@ -87,6 +104,19 @@ const ProfileModal = ({ user, onClose }) => {
     }));
     
     // Clear error when user starts typing
+    if (error) {
+      setError('');
+    }
+  };
+
+  const handleAvatarSelect = (avatar) => {
+    setEditedUser(prev => ({
+      ...prev,
+      avatar: avatar
+    }));
+    setShowAvatarPicker(false);
+    
+    // Clear error when user selects avatar
     if (error) {
       setError('');
     }
@@ -158,11 +188,14 @@ const ProfileModal = ({ user, onClose }) => {
           <div className="text-center mb-6">
             <div className="relative inline-block">
               <div className="w-24 h-24 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-3xl">
-                {currentUserData.avatar || currentUserData.name?.charAt(0).toUpperCase() || '👤'}
+                {(isEditing ? editedUser.avatar : currentUserData.avatar) || currentUserData.name?.charAt(0).toUpperCase() || '👤'}
               </div>
-              {isOwnProfile && (
-                <button className="absolute -bottom-2 -right-2 p-2 bg-blue-500 text-white rounded-full hover:bg-blue-600">
-                  <Camera className="w-4 h-4" />
+              {isOwnProfile && isEditing && (
+                <button 
+                  onClick={() => setShowAvatarPicker(!showAvatarPicker)}
+                  className="absolute -bottom-2 -right-2 p-2 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors"
+                >
+                  <Edit2 className="w-4 h-4" />
                 </button>
               )}
             </div>
@@ -208,32 +241,15 @@ const ProfileModal = ({ user, onClose }) => {
               )}
             </div>
 
-            {/* Status */}
+            {/* Status - Read Only */}
             <div className="mt-2">
-              {isEditing ? (
-                <select
-                  value={editedUser.status}
-                  onChange={(e) => handleInputChange('status', e.target.value)}
-                  className={`px-3 py-1 rounded-full text-sm border ${
-                    isDark 
-                      ? 'bg-gray-700 border-gray-600 text-white' 
-                      : 'bg-white border-gray-300 text-gray-900'
-                  } focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-                  disabled={isLoading}
-                >
-                  <option value="online">Online</option>
-                  <option value="away">Away</option>
-                  <option value="offline">Offline</option>
-                </select>
-              ) : (
-                <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${
-                  currentUserData.status === 'online' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' :
-                  currentUserData.status === 'away' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' :
-                  'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                }`}>
-                  {currentUserData.status || 'online'}
-                </div>
-              )}
+              <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${
+                currentUserData.status === 'online' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' :
+                currentUserData.status === 'away' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' :
+                'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+              }`}>
+                {currentUserData.status || 'online'}
+              </div>
             </div>
           </div>
 
@@ -308,6 +324,61 @@ const ProfileModal = ({ user, onClose }) => {
             </div>
           )}
         </div>
+
+        {/* Avatar Picker Modal */}
+        {showAvatarPicker && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center bg-black bg-opacity-50">
+            <div className={`w-full max-w-md mx-4 ${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-xl`}>
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Choose Avatar</h3>
+                  <button 
+                    onClick={() => setShowAvatarPicker(false)}
+                    className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              
+              <div className="p-6">
+                <div className="grid grid-cols-8 gap-3 max-h-64 overflow-y-auto">
+                  {DEFAULT_AVATARS.map((avatar, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleAvatarSelect(avatar)}
+                      className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl hover:scale-110 transition-all ${
+                        editedUser.avatar === avatar
+                          ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900'
+                          : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      {avatar}
+                      {editedUser.avatar === avatar && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Check className="w-4 h-4 text-blue-500" />
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+                
+                <div className="mt-4 text-center">
+                  <button
+                    onClick={() => handleAvatarSelect('')}
+                    className={`px-4 py-2 rounded-lg text-sm ${
+                      editedUser.avatar === ''
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    Use Initial Letter
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

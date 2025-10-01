@@ -117,6 +117,7 @@ const ChatInfoModal = ({
   onRemoveAdmin,
   onClearChat,
   onHideChat,
+  onDeleteChat,
 }) => {
   const [activeTab, setActiveTab] = useState("info");
   const [isEditing, setIsEditing] = useState(false);
@@ -241,6 +242,25 @@ const isUserAdmin = (userId) => {
           onClose();
         } catch (error) {
           console.error("Failed to hide chat:", error);
+        }
+        hideConfirmation();
+      },
+    });
+  };
+
+  const handleDeleteChat = async () => {
+    showConfirmation({
+      title: "Delete Chat",
+      message: "Are you sure you want to delete this conversation? This will clear all messages and hide the chat for you. It will reappear when someone sends a new message, starting fresh from that message.",
+      confirmText: "Delete Chat",
+      cancelText: "Cancel",
+      type: "danger",
+      onConfirm: async () => {
+        try {
+          await onDeleteChat(conversation._id);
+          onClose();
+        } catch (error) {
+          console.error("Failed to delete chat:", error);
         }
         hideConfirmation();
       },
@@ -1089,6 +1109,14 @@ const isUserAdmin = (userId) => {
                     >
                       <UserMinus className="w-4 h-4" />
                       <span>Hide Chat</span>
+                    </button>
+                    
+                    <button
+                      onClick={handleDeleteChat}
+                      className="w-full flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Delete Chat</span>
                     </button>
                   </div>
                 </div>

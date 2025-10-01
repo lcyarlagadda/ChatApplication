@@ -21,16 +21,13 @@ router.get('/', auth, async (req, res) => {
     const user = await User.findById(userId).populate('blockedUsers');
     
     const conversations = await Conversation.find({
-      'participants.user': userId,
-      $or: [
-        { 'participants.isHidden': { $exists: false } },
-        { 'participants.isHidden': false }
-      ]
+      'participants.user': userId
     })
     .populate({
       path: 'participants.user',
       select: 'name email avatar status lastSeen isOnline blockedUsers'
     })
+    .select('+participants.isHidden +participants.hiddenAt')
     .populate('admin', 'name email avatar') 
     .populate('admins', 'name email avatar')
     .populate({
@@ -46,6 +43,23 @@ router.get('/', auth, async (req, res) => {
     // Add blocked status to conversations and handle cleared messages
     const conversationsWithBlockStatus = await Promise.all(conversations.map(async (conv) => {
       const convObj = conv.toObject();
+      
+      // Check if this conversation is hidden for the current user
+      const currentUserParticipant = convObj.participants.find(p => p.user._id.toString() === userId.toString());
+      if (currentUserParticipant && currentUserParticipant.isHidden) {
+        // Check if user left the conversation (has leftAt timestamp)
+        if (currentUserParticipant.leftAt) {
+          console.log(`CONVERSATION FILTER: User ${userId} - Conversation ${convObj._id} is left (leftAt: ${currentUserParticipant.leftAt}), keeping visible`);
+          // Keep the conversation but mark it as left
+          convObj.userLeft = true;
+          convObj.leftAt = currentUserParticipant.leftAt;
+        } else {
+          console.log(`CONVERSATION FILTER: User ${userId} - Conversation ${convObj._id} is hidden (isHidden: ${currentUserParticipant.isHidden}, hiddenAt: ${currentUserParticipant.hiddenAt}), filtering out`);
+          return null; // Skip this conversation for the current user (regular hidden conversation)
+        }
+      } else if (currentUserParticipant) {
+        console.log(`CONVERSATION FILTER: User ${userId} - Conversation ${convObj._id} is visible (isHidden: ${currentUserParticipant.isHidden}, hiddenAt: ${currentUserParticipant.hiddenAt})`);
+      }
       
       if (convObj.type === 'direct') {
         const otherParticipant = convObj.participants.find(p => p.user._id.toString() !== userId.toString());
@@ -83,9 +97,12 @@ router.get('/', auth, async (req, res) => {
       return convObj;
     }));
 
+    // Filter out null values (hidden conversations)
+    const filteredConversations = conversationsWithBlockStatus.filter(conv => conv !== null);
+
     res.json({
       success: true,
-      data: conversationsWithBlockStatus
+      data: filteredConversations
     });
 
   } catch (error) {
@@ -537,6 +554,9 @@ router.post('/:id/admins', async (req, res) => {
           message: systemMessage.toObject()
         }
       );
+
+      // Make hidden conversations reappear for all participants when system message arrives
+      await req.socketService.makeHiddenConversationReappear(id, req.user.id);
     }
     
     res.json({
@@ -651,6 +671,9 @@ router.delete('/:id/admins/:adminId', async (req, res) => {
           message: systemMessage.toObject()
         }
       );
+
+      // Make hidden conversations reappear for all participants when system message arrives
+      await req.socketService.makeHiddenConversationReappear(id, req.user.id);
     }
     
     res.json({
@@ -742,6 +765,9 @@ router.put('/:id', async (req, res) => {
             message: systemMessage.toObject()
           }
         );
+
+        // Make hidden conversations reappear for all participants when system message arrives
+        await req.socketService.makeHiddenConversationReappear(id, req.user.id);
       }
     }
     
@@ -772,7 +798,93 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/conversations/:id - Delete conversation (FIXED)
+// Delete conversation (user-specific) - combines clear chat and hide chat
+router.post('/:conversationId/delete', auth, async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const userId = req.user._id;
+    
+    console.log(`🗑️ DELETE CHAT: Received delete request for conversation ${conversationId} from user ${userId}`);
+
+    // Find the conversation
+    const conversation = await Conversation.findById(conversationId).populate('participants.user');
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Conversation not found'
+      });
+    }
+
+    // Check if user is a participant
+    const isParticipant = conversation.participants.some(
+      p => p.user._id.toString() === userId.toString()
+    );
+
+    if (!isParticipant) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to delete this conversation'
+      });
+    }
+
+    // Step 1: Clear all messages for this user (mark as cleared)
+    await Message.updateMany(
+      { 
+        conversation: conversationId,
+        clearedFor: { $ne: userId }
+      },
+      { 
+        $addToSet: { clearedFor: userId }
+      }
+    );
+
+    // Step 2: Hide the conversation for this user
+    const participant = conversation.participants.find(
+      p => p.user._id.toString() === userId.toString()
+    );
+    
+    if (participant) {
+      console.log(`🗑️ DELETE CHAT: Before deletion - User ${userId}, isHidden: ${participant.isHidden}, hiddenAt: ${participant.hiddenAt}`);
+      
+      participant.isHidden = true;
+      participant.hiddenAt = new Date();
+      participant.lastRead = new Date(); // Mark as read to prevent unread notifications
+      await conversation.save();
+      
+      console.log(`🗑️ DELETE CHAT: After deletion - User ${userId} deleted conversation ${conversationId}`);
+      console.log(`🗑️ DELETE CHAT: Participant isHidden set to: ${participant.isHidden}, hiddenAt: ${participant.hiddenAt}`);
+      
+      // Verify the change was saved
+      const updatedConversation = await Conversation.findById(conversationId);
+      const updatedParticipant = updatedConversation.participants.find(
+        p => p.user._id.toString() === userId.toString()
+      );
+      console.log(`🗑️ DELETE CHAT: Verification - isHidden: ${updatedParticipant?.isHidden}, hiddenAt: ${updatedParticipant?.hiddenAt}`);
+    }
+
+    // Emit socket event to notify only this user
+    if (req.socketService) {
+      req.socketService.sendNotificationToUser(userId.toString(), 'conversation_deleted', {
+        conversationId,
+        timestamp: new Date()
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Conversation deleted successfully. It will reappear when someone sends a new message.'
+    });
+
+  } catch (error) {
+    console.error('Delete conversation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while deleting conversation'
+    });
+  }
+});
+
+// DELETE /api/conversations/:id - Delete conversation permanently (ADMIN ONLY for groups/broadcasts)
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -787,23 +899,19 @@ router.delete('/:id', async (req, res) => {
       });
     }
     
-    // Check permissions
-    let canDelete = false;
-    
+    // For direct conversations, redirect to soft delete
     if (conversation.type === 'direct') {
-      // For direct conversations, any participant can delete (only removes for them)
-      canDelete = conversation.isParticipant(userId);
-    } else {
-      // For groups/broadcasts, only admin can delete
-      canDelete = conversation.isAdmin(userId);
+      return res.status(400).json({
+        success: false,
+        message: 'Direct conversations cannot be permanently deleted. Use the soft delete endpoint instead.'
+      });
     }
     
-    if (!canDelete) {
+    // For groups/broadcasts, only admin can permanently delete
+    if (!conversation.isAdmin(userId)) {
       return res.status(403).json({
         success: false,
-        message: conversation.type === 'direct' 
-          ? 'You can only delete conversations you participate in'
-          : 'Only administrators can delete this conversation'
+        message: 'Only administrators can permanently delete this conversation'
       });
     }
     
@@ -839,7 +947,7 @@ router.delete('/:id', async (req, res) => {
     
     res.json({
       success: true,
-      message: `${conversation.type === 'broadcast' ? 'Broadcast channel' : conversation.type === 'group' ? 'Group' : 'Conversation'} deleted successfully`,
+      message: `${conversation.type === 'broadcast' ? 'Broadcast channel' : 'Group'} deleted permanently`,
       conversationId: id,
       deletedBy: userId
     });
@@ -957,6 +1065,9 @@ router.post('/:id/participants', async (req, res) => {
           message: systemMessage.toObject()
         }
       );
+
+      // Make hidden conversations reappear for all participants when system message arrives
+      await req.socketService.makeHiddenConversationReappear(id, req.user.id);
     }
     
     res.json({
@@ -1076,6 +1187,9 @@ router.delete('/:id/participants/:participantId', async (req, res) => {
           message: systemMessage.toObject()
         }
       );
+
+      // Make hidden conversations reappear for all participants when system message arrives
+      await req.socketService.makeHiddenConversationReappear(id, req.user.id);
     }
     
     res.json({
@@ -1422,17 +1536,8 @@ router.post('/:conversationId/leave', auth, async (req, res) => {
       }
     }
 
-    // Remove user from participants
-    conversation.participants = conversation.participants.filter(
-      p => p.user._id.toString() !== userId.toString()
-    );
-
-    // Remove from admins if user was admin
-    if (conversation.admins) {
-      conversation.admins = conversation.admins.filter(
-        adminId => adminId.toString() !== userId.toString()
-      );
-    }
+    // Remove user from participants (mark as left instead of removing)
+    await conversation.removeParticipant(userId);
 
     // If conversation becomes empty, delete it
     if (conversation.participants.length === 0) {
@@ -1529,6 +1634,9 @@ router.post('/:conversationId/leave', auth, async (req, res) => {
           }
         );
 
+        // Make hidden conversations reappear for all participants when system message arrives
+        await req.socketService.makeHiddenConversationReappear(conversationId, userId);
+
         // Send admin transfer message if applicable
         if (adminTransferMessage) {
           req.socketService.sendNotificationToConversation(
@@ -1539,6 +1647,9 @@ router.post('/:conversationId/leave', auth, async (req, res) => {
               message: adminTransferMessage.toObject()
             }
           );
+
+          // Make hidden conversations reappear for all participants when admin transfer message arrives
+          await req.socketService.makeHiddenConversationReappear(conversationId, userId);
         }
 
         // If admin was transferred, notify about admin change

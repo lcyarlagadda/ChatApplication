@@ -1,24 +1,24 @@
 // api/config.js
 const API_CONFIG = {
-  BASE_URL: process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000/api',
+  BASE_URL: process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000',
   TIMEOUT: 30000, // 30 seconds
   
   ENDPOINTS: {
     AUTH: {
-      LOGIN: '/api/auth/login',
-      REGISTER: '/api/auth/register',
-      LOGOUT: '/api/auth/logout',
-      LOGOUT_ALL: '/api/auth/logout-all',
-      REFRESH: '/api/auth/refresh',
-      REFRESH_TOKEN: '/api/auth/refresh-token',
-      VERIFY_TOKEN: '/api/auth/verify-token',
-      ME: '/api/auth/me',
-      PROFILE: '/api/auth/profile',
-      CHANGE_PASSWORD: '/api/auth/change-password',
-      FORGOT_PASSWORD: '/api/auth/forgot-password',
-      RESET_PASSWORD: '/api/auth/reset-password',
-      VERIFY_EMAIL: '/api/auth/verify-email',
-      RESEND_VERIFICATION: '/auth/resend-verification',
+      LOGIN: 'auth/login',
+      REGISTER: 'auth/register',
+      LOGOUT: 'auth/logout',
+      LOGOUT_ALL: 'auth/logout-all',
+      REFRESH: 'auth/refresh',
+      REFRESH_TOKEN: 'auth/refresh-token',
+      VERIFY_TOKEN: 'auth/verify-token',
+      ME: 'auth/me',
+      PROFILE: 'auth/profile',
+      CHANGE_PASSWORD: 'auth/change-password',
+      FORGOT_PASSWORD: 'auth/forgot-password',
+      RESET_PASSWORD: 'auth/reset-password',
+      VERIFY_EMAIL: 'auth/verify-email',
+      RESEND_VERIFICATION: 'auth/resend-verification',
     },
     
     CONVERSATIONS: {

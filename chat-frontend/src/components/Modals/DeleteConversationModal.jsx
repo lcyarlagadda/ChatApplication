@@ -23,7 +23,7 @@ const DeleteConversationModal = ({
                 <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
               </div>
               <h2 className="text-xl font-bold">
-                Delete {isGroup ? 'Group' : 'Conversation'}
+                Remove {isGroup ? 'Group' : 'Conversation'}
               </h2>
             </div>
             <button
@@ -41,17 +41,18 @@ const DeleteConversationModal = ({
             <div>
               <p className="text-gray-600 dark:text-gray-300 mb-2">
                 {isGroup 
-                  ? `Are you sure you want to delete the group "${conversationName}"?`
-                  : `Are you sure you want to delete the conversation with ${conversationName}?`
+                  ? `Are you sure you want to remove the group "${conversationName}" from your chat list?`
+                  : `Are you sure you want to remove the conversation with ${conversationName} from your chat list?`
                 }
               </p>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                This action cannot be undone and will permanently delete:
+                This will remove the {isGroup ? 'group' : 'conversation'} from your chat list:
               </p>
               <ul className="text-sm text-gray-500 dark:text-gray-400 mt-2 space-y-1">
-                <li>• All messages in this {isGroup ? 'group' : 'conversation'}</li>
-                <li>• All shared files and media</li>
-                <li>• Message history for all participants</li>
+                <li>• Messages will be cleared for you only</li>
+                <li>• The {isGroup ? 'group' : 'conversation'} will be hidden from your list</li>
+                <li>• It will reappear when someone sends a new message</li>
+                <li>• Other participants won't be affected</li>
               </ul>
             </div>
           </div>
@@ -90,7 +91,7 @@ const DeleteConversationModal = ({
             onClick={onConfirm}
             className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
           >
-            Delete {isGroup ? 'Group' : 'Conversation'}
+            Remove {isGroup ? 'Group' : 'Conversation'}
           </button>
         </div>
       </div>

@@ -73,6 +73,7 @@ class SocketService {
       // Store user connection
       this.connectedUsers.set(socket.userId, {
         socketId: socket.id,
+        socket: socket,
         userInfo: socket.user,
         connectedAt: new Date()
       });
@@ -88,9 +89,12 @@ class SocketService {
       // Update user's last seen and online status
       this.updateUserOnlineStatus(socket.userId, true);
 
-      // Handle joining user room
+      // Handle joining user room - FIXED: Only allow joining own room
       socket.on('join_user_room', (userId) => {
-        socket.join(`user_${userId}`);
+        // Only allow users to join their own room
+        if (userId === socket.userId) {
+          socket.join(`user_${userId}`);
+        }
       });
 
       // Handle joining conversation rooms - FIXED: No auto-read on join
@@ -389,14 +393,15 @@ class SocketService {
       conversationId,
       message: message.toObject()
     });
-
+    
     // Make hidden conversations reappear for all participants when new message arrives
-    await this.makeHiddenConversationReappear(conversationId, senderId);
+    console.log(`🔄 SOCKET: Calling makeHiddenConversationReappear for conversation ${conversationId}, sender: ${socket.userId}`);
+    await this.makeHiddenConversationReappear(conversationId, socket.userId);
     
     // Process delivery status for online users immediately
     if (onlineParticipants.length > 0) {
       // Process delivery immediately for better real-time experience
-      await this.processMessageDelivery(message._id, onlineParticipants, socket.userId);
+        await this.processMessageDelivery(message._id, onlineParticipants, socket.userId);
     } else {
     }
     
@@ -423,7 +428,7 @@ class SocketService {
         
         if (!alreadyDelivered) {
           message.deliveredTo.push({
-            user: userId,
+        user: userId,
             deliveredAt: deliveredTimestamp
           });
         }
@@ -434,11 +439,11 @@ class SocketService {
         message.status = 'delivered';
       }
       
-      await message.save();
-      
-      // Notify sender about delivery
+        await message.save();
+        
+        // Notify sender about delivery
       const notificationSent = this.sendNotificationToUser(senderId, 'message_status_update', {
-        messageId,
+          messageId,
         status: message.status,
         deliveredTo: message.deliveredTo,
         timestamp: deliveredTimestamp
@@ -446,12 +451,12 @@ class SocketService {
       
       
       // IMMEDIATE: Mark as seen for users who are actively viewing the conversation
-      const activeViewers = onlineUserIds.filter(userId => {
-        const isViewingConversation = this.activeChats.get(userId) === message.conversation.toString();
+        const activeViewers = onlineUserIds.filter(userId => {
+          const isViewingConversation = this.activeChats.get(userId) === message.conversation.toString();
         return isViewingConversation;
-      });
-      
-      if (activeViewers.length > 0) {
+        });
+        
+        if (activeViewers.length > 0) {
         // Mark as seen immediately for active viewers
         await this.processMessageSeen(messageId, activeViewers, senderId);
       }
@@ -597,7 +602,7 @@ class SocketService {
         'deliveredTo.user': { $ne: socket.userId },
         isDeleted: { $ne: true }
       });
-
+      
       if (undeliveredMessages.length > 0) {
         const messageIds = undeliveredMessages.map(msg => msg._id);
         
@@ -607,13 +612,13 @@ class SocketService {
         for (const messageId of messageIds) {
           const message = await Message.findById(messageId);
           if (message) {
-            const alreadyDelivered = message.deliveredTo.some(
-              d => d.user.toString() === socket.userId
-            );
-            
-            if (!alreadyDelivered) {
-              message.deliveredTo.push({
-                user: socket.userId,
+        const alreadyDelivered = message.deliveredTo.some(
+          d => d.user.toString() === socket.userId
+        );
+        
+        if (!alreadyDelivered) {
+          message.deliveredTo.push({
+            user: socket.userId,
                 deliveredAt: deliveredTimestamp
               });
               
@@ -621,7 +626,7 @@ class SocketService {
                 message.status = 'delivered';
               }
               
-              await message.save();
+        await message.save();
             }
           }
         }
@@ -631,7 +636,7 @@ class SocketService {
           const senderSocket = this.getUserSocket(message.sender.toString());
           if (senderSocket) {
             this.sendNotificationToUser(message.sender.toString(), 'message_status_update', {
-              messageId: message._id,
+          messageId: message._id,
               status: 'delivered',
               timestamp: deliveredTimestamp,
               deliveredTo: message.deliveredTo
@@ -661,25 +666,59 @@ class SocketService {
 
   async makeHiddenConversationReappear(conversationId, senderId) {
     const Conversation = require('../models/Conversation');
+    const Message = require('../models/Message');
     
     try {
-      const conversation = await Conversation.findById(conversationId);
-      if (!conversation) return;
+      console.log(`🔍 makeHiddenConversationReappear called for conversation ${conversationId}, sender: ${senderId}`);
       
-      // Find all participants who have hidden this conversation
+      const conversation = await Conversation.findById(conversationId);
+      if (!conversation) {
+        console.log(`❌ Conversation ${conversationId} not found`);
+        return;
+      }
+      
+      console.log(`📋 Conversation participants before restoration:`, conversation.participants.map(p => ({ 
+        userId: p.user.toString(), 
+        isHidden: p.isHidden, 
+        hiddenAt: p.hiddenAt 
+      })));
+      
+      // Find all participants who have hidden this conversation (excluding the sender)
       const hiddenParticipants = conversation.participants.filter(
-        p => p.isHidden === true
+        p => p.isHidden === true && p.user.toString() !== senderId
       );
       
-      if (hiddenParticipants.length === 0) return;
+      console.log(`🔍 Found ${hiddenParticipants.length} hidden participants:`, 
+        hiddenParticipants.map(p => ({ userId: p.user.toString(), isHidden: p.isHidden, hiddenAt: p.hiddenAt }))
+      );
       
-      // Make conversation reappear for all hidden participants
+      if (hiddenParticipants.length === 0) {
+        console.log(`ℹ️ No hidden participants found for conversation ${conversationId}`);
+        return;
+      }
+      
+      // Make conversation reappear for all hidden participants (except sender)
       for (const participant of hiddenParticipants) {
+        console.log(`🔄 Restoring conversation ${conversationId} for user ${participant.user.toString()}`);
+        
         participant.isHidden = false;
         participant.hiddenAt = null;
         
+        // Clear the clearedFor array for this user so they see new messages
+        const clearResult = await Message.updateMany(
+          { 
+            conversation: conversationId,
+            clearedFor: participant.user
+          },
+          { 
+            $pull: { clearedFor: participant.user }
+          }
+        );
+        
+        console.log(`🧹 Cleared ${clearResult.modifiedCount} messages for user ${participant.user.toString()}`);
+        
         // Notify the user that the conversation has reappeared
-        this.sendNotificationToUser(
+        const notificationSent = this.sendNotificationToUser(
           participant.user.toString(),
           'conversation_reappeared',
           {
@@ -688,9 +727,20 @@ class SocketService {
             timestamp: new Date()
           }
         );
+        
+        console.log(`📢 Sent conversation_reappeared notification to user ${participant.user.toString()}: ${notificationSent}`);
       }
       
       await conversation.save();
+      console.log(`✅ Conversation ${conversationId} restored and saved successfully`);
+      
+      // Verify the changes were saved
+      const updatedConversation = await Conversation.findById(conversationId);
+      console.log(`📋 Conversation participants after restoration:`, updatedConversation.participants.map(p => ({ 
+        userId: p.user.toString(), 
+        isHidden: p.isHidden, 
+        hiddenAt: p.hiddenAt 
+      })));
     } catch (error) {
       console.error('Error making hidden conversation reappear:', error);
     }
@@ -973,7 +1023,7 @@ class SocketService {
 
   getUserSocket(userId) {
     const userConnection = this.connectedUsers.get(userId);
-    return userConnection ? userConnection.socketId : null;
+    return userConnection ? userConnection.socket : null;
   }
 
   isUserOnline(userId) {
@@ -988,9 +1038,12 @@ class SocketService {
   sendNotificationToUser(userId, event, data) {
     const socketId = this.getUserSocket(userId);
     if (socketId) {
-      this.io.to(`user_${userId}`).emit(event, data);
+      console.log(`SOCKET: Sending ${event} to user ${userId} via socket ${socketId}`);
+      // Send directly to the socket instead of using rooms to avoid cross-user issues
+      socketId.emit(event, data);
       return true;
     }
+    console.log(`SOCKET: User ${userId} not found for event ${event}`);
     return false;
   }
 

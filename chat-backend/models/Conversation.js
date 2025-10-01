@@ -43,6 +43,10 @@ const conversationSchema = new mongoose.Schema({
     hiddenAt: {
       type: Date,
       default: null
+    },
+    leftAt: {
+      type: Date,
+      default: null
     }
   }],
   hiddenFor: [{
@@ -187,9 +191,15 @@ conversationSchema.methods.addParticipant = function(userId, role = 'member') {
   return this.save();
 };
 
-// Remove participant from conversation
+// Remove participant from conversation (mark as left instead of removing)
 conversationSchema.methods.removeParticipant = function(userId) {
-  this.participants = this.participants.filter(p => p.user?._id?.toString() !== userId.toString());
+  // Find the participant and mark them as left instead of removing them
+  const participant = this.participants.find(p => p.user?._id?.toString() === userId.toString());
+  if (participant) {
+    participant.isHidden = true;
+    participant.hiddenAt = new Date();
+    participant.leftAt = new Date(); // Add leftAt timestamp
+  }
   
   // Also remove from admins array if they were an admin
   this.admins = this.admins.filter(adminId => adminId?._id?.toString() !== userId.toString());

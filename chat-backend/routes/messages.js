@@ -563,6 +563,10 @@ router.post('/:conversationId', auth, [
         }
       );
 
+      // Make hidden conversations reappear for all participants when new message arrives
+      console.log(`🔄 HTTP: Calling makeHiddenConversationReappear for conversation ${conversationId}, sender: ${req.user.id}`);
+      await req.socketService.makeHiddenConversationReappear(conversationId, req.user.id);
+
       // Process delivery status for online users
       const otherParticipants = conversation.participants
         .filter(p => p.user._id.toString() !== req.user.id);

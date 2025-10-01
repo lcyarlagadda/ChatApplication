@@ -31,6 +31,7 @@ const ChatApp = () => {
     setActiveChat,
     onlineUsers,
     updateOnlineUsers,
+    updateUserProfile,
     isLoading,
     setIsLoading,
     loginUser,
@@ -672,6 +673,29 @@ const ChatApp = () => {
       );
     });
 
+    // Handle user profile updates
+    socketService.onUserProfileUpdate((data) => {
+      const { userId, user } = data;
+      console.log("🔔 User profile updated:", { userId, user });
+
+      // Update user info in conversations
+      updateConversations(
+        conversations.map((conv) => ({
+          ...conv,
+          participants: conv.participants.map((participant) =>
+            participant.user._id === userId
+              ? { ...participant, user: { ...participant.user, ...user } }
+              : participant
+          ),
+        }))
+      );
+
+      // Update current user if it's their own profile
+      if (userId === currentUser?._id) {
+        updateUserProfile(user);
+      }
+    });
+
     // Conversation updates
     // Replace the existing conversation update handler with this enhanced version:
     socketService.onConversationUpdate((data) => {
@@ -1072,10 +1096,43 @@ const ChatApp = () => {
 
     // Handle conversation reappeared
     socketService.onConversationReappeared((data) => {
-      const { conversationId } = data;
+      const { conversationId, senderId } = data;
       
-      // Fetch the conversation details and add it back to the list
-      fetchConversationDetails(conversationId);
+      console.log(`🎉 FRONTEND: Conversation ${conversationId} reappeared due to message from ${senderId}`);
+      console.log(`🎉 FRONTEND: Current activeChat:`, activeChat?._id);
+      console.log(`🎉 FRONTEND: Current conversations count:`, conversations.length);
+      
+      // Refresh the entire conversations list to get the restored conversation
+      refreshConversationsList(conversationId);
+      
+      // Always fetch messages for the reappeared conversation
+      console.log(`🎉 FRONTEND: Fetching messages for reappeared conversation ${conversationId}`);
+      fetchMessages(conversationId);
+      
+      // Show notification that conversation reappeared
+      showNotification("A conversation has reappeared due to a new message", "error");
+    });
+
+    // Handle conversation deleted
+    socketService.onConversationDeleted((data) => {
+      const { conversationId } = data;
+      console.log(`FRONTEND: Received conversation_deleted event for conversation ${conversationId}`);
+      
+      // Clear messages for this conversation
+      setMessages(prev => ({
+        ...prev,
+        [conversationId]: []
+      }));
+      
+      // Hide conversation from sidebar
+      updateConversations(prevConversations => 
+        prevConversations.filter(conv => conv._id !== conversationId)
+      );
+      
+      // Clear active chat if it's the deleted conversation
+      if (activeChat?._id === conversationId) {
+        setActiveChat(null);
+      }
     });
   };
 
@@ -1092,6 +1149,7 @@ const ChatApp = () => {
     socketService.off("user_online");
     socketService.off("user_offline");
     socketService.off("user_status_update");
+    socketService.off("user_profile_updated");
     socketService.off("conversation_updated");
     socketService.off("conversation_created");
     socketService.off("conversation_deleted");
@@ -1285,6 +1343,66 @@ const ChatApp = () => {
       }
     } catch (error) {
       console.error("Error refreshing unread counts:", error);
+    }
+  };
+
+  const refreshConversationsList = async (reappearedConversationId = null) => {
+    try {
+      console.log("Refreshing conversations list...");
+      
+      // Fetch conversations
+      const conversationsResponse = await sessionManager.authenticatedRequest("/conversations");
+      if (!conversationsResponse.ok) {
+        throw new Error(`HTTP ${conversationsResponse.status}: ${conversationsResponse.statusText}`);
+      }
+
+      const conversationsData = await conversationsResponse.json();
+      if (conversationsData.success) {
+        // Fetch unread counts for all conversations
+        const unreadCountsResponse = await sessionManager.authenticatedRequest("/conversations/unread-counts");
+        
+        let unreadCounts = {};
+        if (unreadCountsResponse.ok) {
+          const unreadCountsData = await unreadCountsResponse.json();
+          if (unreadCountsData.success) {
+            unreadCounts = unreadCountsData.unreadCounts;
+          }
+        }
+        
+        const conversationsWithUnread = conversationsData.data.map((conversation) => ({
+          ...conversation,
+          unreadCount: unreadCounts[conversation._id] || 0,
+        }));
+
+        // Apply blocked status since we know we have complete user data
+        const conversationsWithBlockedStatus = conversationsWithUnread.map((conv) => ({
+          ...conv,
+          participants: conv.participants.map((participant) => ({
+            ...participant,
+            user: {
+              ...participant.user,
+              isBlockedByCurrentUser: currentUser.blockedUsers.includes(participant.user._id),
+              hasBlockedCurrentUser: participant.user.hasBlockedCurrentUser || false,
+            },
+          })),
+        }));
+
+        console.log("Setting refreshed conversations with blocked status applied");
+        console.log(`FRONTEND: Refreshed conversations count: ${conversationsWithBlockedStatus.length}`);
+        console.log(`FRONTEND: Refreshed conversations:`, conversationsWithBlockedStatus.map(c => ({ id: c._id, name: c.name || 'Direct', isHidden: c.participants.find(p => p.user._id === currentUser._id)?.isHidden })));
+        updateConversations(conversationsWithBlockedStatus);
+        
+        // If this is a reappeared conversation, set it as active
+        if (reappearedConversationId) {
+          const reappearedConversation = conversationsWithBlockedStatus.find(conv => conv._id === reappearedConversationId);
+          if (reappearedConversation) {
+            console.log(`🎉 FRONTEND: Setting reappeared conversation as active: ${reappearedConversationId}`);
+            setActiveChat(reappearedConversation);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Failed to refresh conversations list:", error);
     }
   };
 
@@ -1616,14 +1734,26 @@ const ChatApp = () => {
     if (conversation && conversation.type === "broadcast") {
       console.log(
         "admins",
-        conversation.admin._id,
-        conversation.admins?._id,
+        conversation.admin,
+        conversation.admins,
         currentUser._id
       );
-      const isAdmin =
-        conversation.admin?._id === currentUser._id ||
-        (conversation.admins &&
-          conversation.admins?.some((admin) => admin._id === currentUser._id));
+      
+      // Check main admin - handle both string and object formats
+      const mainAdminId = typeof conversation.admin === 'string' 
+        ? conversation.admin 
+        : conversation.admin?._id;
+      
+      const isMainAdmin = mainAdminId === currentUser._id;
+      
+      // Check admins array - handle mixed formats
+      const isAdditionalAdmin = conversation.admins && Array.isArray(conversation.admins) &&
+        conversation.admins.some((admin) => {
+          const adminUserId = typeof admin === 'string' ? admin : admin?._id;
+          return adminUserId === currentUser._id;
+        });
+      
+      const isAdmin = isMainAdmin || isAdditionalAdmin;
 
       if (!isAdmin) {
         showNotification(
@@ -1737,25 +1867,25 @@ const ChatApp = () => {
     }
   };
 
-  // In ChatLayout.jsx, add this function:
+  // Handle conversation deletion - always use soft delete for regular users
   const handleDeleteConversation = async (
     conversationId,
     deleteType = "forMe"
   ) => {
     try {
-      const queryParam =
-        deleteType === "forEveryone" ? "?type=forEveryone" : "?type=forMe";
+      // For regular users, always use soft delete (hide conversation)
+      // Only admins can permanently delete groups/broadcasts
       const response = await sessionManager.authenticatedRequest(
-        `/conversations/${conversationId}${queryParam}`,
+        `/conversations/${conversationId}/delete`,
         {
-          method: "DELETE",
+          method: "POST",
         }
       );
 
       const result = await response.json();
 
       if (result.success) {
-        // Always remove from local state when user deletes (either type)
+        // Remove from local state when user deletes
         updateConversations(
           conversations.filter((conv) => conv._id !== conversationId)
         );
@@ -1772,17 +1902,7 @@ const ChatApp = () => {
           setActiveChat(null);
         }
 
-        let messageText;
-        if (result.deletedForEveryone) {
-          messageText =
-            deleteType === "forEveryone"
-              ? "Conversation deleted for everyone"
-              : "Conversation deleted (all participants removed it)";
-        } else {
-          messageText = "Conversation removed from your chat list";
-        }
-
-        showNotification(messageText, "success");
+        showNotification("Conversation removed from your chat list. It will reappear when someone sends a new message.", "success");
       } else {
         throw new Error(result.message || "Failed to delete conversation");
       }
@@ -1793,6 +1913,43 @@ const ChatApp = () => {
         "error"
       );
       throw error;
+    }
+  };
+
+  const fetchMessages = async (conversationId) => {
+    try {
+      console.log(`🔄 Fetching initial messages for conversation ${conversationId}`);
+      
+      const response = await sessionManager.authenticatedRequest(
+        `/messages/${conversationId}?page=1&limit=50`
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log(`📥 Messages API response for ${conversationId}:`, result);
+      
+      if (result.success) {
+        const messages = result.data || result.messages || [];
+        console.log(`✅ Fetched ${messages.length} messages for conversation ${conversationId}`);
+        console.log(`📋 Messages:`, messages.map(m => ({ id: m._id, content: m.content, sender: m.sender?.name || m.sender?._id })));
+        
+        // Replace messages completely for this conversation
+        setMessages((prev) => {
+          const updated = {
+            ...prev,
+            [conversationId]: messages
+          };
+          console.log(`💾 Updated messages state for ${conversationId}:`, updated[conversationId]?.length || 0, 'messages');
+          return updated;
+        });
+      } else {
+        console.error(`❌ Failed to fetch messages:`, result.message);
+      }
+    } catch (error) {
+      console.error(`❌ Error fetching messages for conversation ${conversationId}:`, error);
     }
   };
 
@@ -2309,6 +2466,50 @@ const ChatApp = () => {
     }
   };
 
+  const handleDeleteChat = async (conversationId) => {
+    try {
+      window.lastUserInteraction = Date.now();
+
+      const response = await sessionManager.authenticatedRequest(
+        `/conversations/${conversationId}/delete`,
+        {
+          method: "POST",
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Clear messages for this conversation in the frontend state
+        setMessages(prev => ({
+          ...prev,
+          [conversationId]: []
+        }));
+        
+        // Hide conversation from sidebar
+        updateConversations(prevConversations => 
+          prevConversations.filter(conv => conv._id !== conversationId)
+        );
+        
+        // Clear active chat if it's the deleted conversation
+        if (activeChat?._id === conversationId) {
+          setActiveChat(null);
+        }
+        
+        showNotification("Conversation deleted successfully. It will reappear when someone sends a new message.", "success");
+      } else {
+        throw new Error(result.message || "Failed to delete conversation");
+      }
+    } catch (error) {
+      console.error("Failed to delete conversation:", error);
+      showNotification(
+        error.message || "Failed to delete conversation. Please try again.",
+        "error"
+      );
+      throw error;
+    }
+  };
+
   const handleBlockUser = async (userId) => {
     try {
       // Update user interaction timestamp
@@ -2635,6 +2836,7 @@ const ChatApp = () => {
         onUpdateConversation={handleConversationUpdate}
         onClearChat={handleClearChat}
         onHideChat={handleHideChat}
+        onDeleteChat={handleDeleteChat}
         onBlockUser={handleBlockUser}
         onLeaveConversation={handleLeaveConversation}
       />

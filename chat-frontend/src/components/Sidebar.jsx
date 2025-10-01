@@ -89,8 +89,24 @@ const getBlockedStatus = (conversation, currentUser) => {
 };
 
   const isUserAdmin = (conversation, userId) => {
-    if (conversation.admin === userId) return 'main';
-    if (conversation.admins && conversation.admins?.some(admin => admin._id === userId)) return 'admin';
+    if (!conversation || !userId) return false;
+    
+    // Check main admin - handle both string and object formats
+    const mainAdminId = typeof conversation.admin === 'string' 
+      ? conversation.admin 
+      : conversation.admin?._id;
+    
+    if (mainAdminId === userId) return 'main';
+    
+    // Check admins array - handle mixed formats
+    if (conversation.admins && Array.isArray(conversation.admins)) {
+      const isAdditionalAdmin = conversation.admins.some((admin) => {
+        const adminUserId = typeof admin === 'string' ? admin : admin?._id;
+        return adminUserId === userId;
+      });
+      if (isAdditionalAdmin) return 'admin';
+    }
+    
     return false;
   };
 
@@ -384,7 +400,9 @@ const getBlockedStatus = (conversation, currentUser) => {
       return {
         name: conversation.name || "Group Chat",
         avatar: conversation.avatar || "👥",
-        status: `${conversation.participants.length} members`,
+        status: conversation.userLeft 
+          ? "You left this group"
+          : `${conversation.participants.length} members`,
         isGroup: true,
         isBroadcast: false,
         isOnline: false
@@ -417,13 +435,15 @@ const getBlockedStatus = (conversation, currentUser) => {
       return {
         name: otherUser.name,
         avatar: otherUser.avatar || otherUser.name?.charAt(0).toUpperCase() || "👤",
-        status: blockedStatus.isBlocked 
-          ? (blockedStatus.blockedByCurrentUser ? "Blocked" : "Blocked you")
-          : isOnline 
-            ? "Online" 
-            : otherUser.lastSeen 
-              ? `Last seen ${formatTime(otherUser.lastSeen)}` 
-              : "Offline",
+        status: conversation.userLeft 
+          ? "You left this group"
+          : blockedStatus.isBlocked 
+            ? (blockedStatus.blockedByCurrentUser ? "Blocked" : "Blocked you")
+            : isOnline 
+              ? "Online" 
+              : otherUser.lastSeen 
+                ? `Last seen ${formatTime(otherUser.lastSeen)}` 
+                : "Offline",
         isGroup: false,
         isBroadcast: false,
         isOnline: !blockedStatus.isBlocked && isOnline,
@@ -554,7 +574,9 @@ const getLastMessagePreview = (conversation) => {
   // Check if user can delete conversation
   const canDeleteConversation = (conversation) => {
     if (conversation.type === 'group' || conversation.type === 'broadcast') {
-      return conversation.admin === currentUser?._id;
+      // Use the robust admin checking logic
+      const adminStatus = isUserAdmin(conversation, currentUser?._id);
+      return adminStatus === 'main' || adminStatus === 'admin';
     } else {
       return true;
     }
@@ -856,8 +878,11 @@ const getLastMessagePreview = (conversation) => {
                       
                       {result.type === 'user' ? (
                         <>
-                          <h4 className="font-medium text-sm text-gray-900 dark:text-white truncate">
-                            {result.conversation.name || result.user?.name || 'Unknown'}
+                          <h4 className="font-medium text-sm text-gray-900 dark:text-white truncate" title={result.conversation.name || result.user?.name || 'Unknown'}>
+                            {(() => {
+                              const name = result.conversation.name || result.user?.name || 'Unknown';
+                              return name.length > 20 ? `${name.substring(0, 20)}...` : name;
+                            })()}
                           </h4>
                           {result.conversation.type === 'direct' && result.user?.email && (
                             <p className="text-xs text-gray-500 truncate">
@@ -871,12 +896,18 @@ const getLastMessagePreview = (conversation) => {
                       ) : (
                         <>
                           <div className="flex items-center space-x-2 mb-1">
-                            <h4 className="font-medium text-sm text-gray-900 dark:text-white truncate">
-                              {result.user?.name || 'Unknown User'}
+                            <h4 className="font-medium text-sm text-gray-900 dark:text-white truncate" title={result.user?.name || 'Unknown User'}>
+                              {(() => {
+                                const name = result.user?.name || 'Unknown User';
+                                return name.length > 20 ? `${name.substring(0, 20)}...` : name;
+                              })()}
                             </h4>
                             <span className="text-xs text-gray-400">in</span>
-                            <span className="text-xs text-gray-500 truncate">
-                              {getConversationInfo(result.conversation).name}
+                            <span className="text-xs text-gray-500 truncate" title={getConversationInfo(result.conversation).name}>
+                              {(() => {
+                                const name = getConversationInfo(result.conversation).name;
+                                return name.length > 20 ? `${name.substring(0, 20)}...` : name;
+                              })()}
                             </span>
                           </div>
                           <div className="text-xs text-gray-500 mb-1">
@@ -973,19 +1004,39 @@ const getLastMessagePreview = (conversation) => {
                   {/* Conversation info with blocked status */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <h3 className={`font-semibold truncate flex items-center space-x-1 ${
+                      <h3 className={`font-semibold flex items-center space-x-1 ${
                         unreadCount > 0 && !blockedStatus.isBlocked ? 'text-gray-900 dark:text-white' : ''
                       }`}>
-                        <span className="text-black-800 dark:text-green-800">{convInfo.name}</span>
+                        <span className="text-black-800 dark:text-green-800 truncate min-w-0 flex-1" title={convInfo.name}>
+                          {convInfo.name && convInfo.name.length > 20 
+                            ? `${convInfo.name.substring(0, 20)}...` 
+                            : convInfo.name}
+                        </span>
                         {/* Show blocked icon next to name */}
                         {conversation.type === 'direct' && blockedStatus.isBlocked && (
                           <UserX className="w-3 h-3 text-red-500 flex-shrink-0" />
                         )}
                         {/* Admin crown for group/broadcast admins */}
                         {(conversation.type === "group" || conversation.type === "broadcast") && 
-                          isUserAdmin(conversation, currentUser?._id) && (
-                          <Crown className="w-3 h-3 text-yellow-500" title="You are the admin" />
-                        )}
+                          (() => {
+                            const adminStatus = isUserAdmin(conversation, currentUser?._id);
+                            if (adminStatus === 'main') {
+                              return (
+                                <Crown 
+                                  className="w-3 h-3 text-yellow-500" 
+                                  title="You are the main administrator" 
+                                />
+                              );
+                            } else if (adminStatus === 'admin') {
+                              return (
+                                <Crown 
+                                  className="w-3 h-3 text-yellow-400" 
+                                  title="You are an administrator" 
+                                />
+                              );
+                            }
+                            return null;
+                          })()}
                       </h3>
                       
                       <div className="flex items-center space-x-1">
@@ -1039,11 +1090,31 @@ const getLastMessagePreview = (conversation) => {
                       <p className="text-xs text-gray-400">
                         {convInfo.status}
                       </p>
-                      {convInfo.isBroadcast && !isUserAdmin(conversation, currentUser?._id) && (
-                        <span className="text-xs text-purple-500 dark:text-purple-400 font-medium">
-                          Read-only
-                        </span>
-                      )}
+                      {(convInfo.isBroadcast || convInfo.isGroup) && (() => {
+                        const adminStatus = isUserAdmin(conversation, currentUser?._id);
+                        if (adminStatus === 'main') {
+                          return (
+                            <span className="text-xs text-yellow-500 dark:text-yellow-400 font-medium flex items-center space-x-1">
+                              <Crown className="w-2.5 h-2.5" />
+                              <span>Main Admin</span>
+                            </span>
+                          );
+                        } else if (adminStatus === 'admin') {
+                          return (
+                            <span className="text-xs text-yellow-400 dark:text-yellow-300 font-medium flex items-center space-x-1">
+                              <Crown className="w-2.5 h-2.5" />
+                              <span>Admin</span>
+                            </span>
+                          );
+                        } else if (convInfo.isBroadcast) {
+                          return (
+                            <span className="text-xs text-purple-500 dark:text-purple-400 font-medium">
+                              Read-only
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
                       {conversation.type === 'direct' && blockedStatus.isBlocked && (
                         <span className="text-xs text-red-500 font-medium flex items-center space-x-1">
                           <Shield className="w-2.5 h-2.5" />

@@ -38,6 +38,9 @@ const MessageInput = ({
   const canSendMessage = () => {
     if (!activeChat || !currentUser) return false;
 
+    // Check if user has left this conversation
+    if (activeChat.userLeft) return false;
+
     // For direct messages and groups, all participants can send
     if (activeChat.type === "direct" || activeChat.type === "group") {
       return true;
@@ -45,12 +48,20 @@ const MessageInput = ({
 
     // For broadcast channels, only admins can send
     if (activeChat.type === "broadcast") {
-      if (activeChat.admin === currentUser._id) return true;
-      if (
-        activeChat.admins &&
-        activeChat.admins.some((admin) => admin._id === currentUser._id)
-      )
-        return true;
+      // Check main admin - handle both string and object formats
+      const mainAdminId = typeof activeChat.admin === 'string' 
+        ? activeChat.admin 
+        : activeChat.admin?._id;
+        
+      if (mainAdminId === currentUser._id) return true;
+
+      // Check admins array - handle mixed formats
+      if (activeChat.admins && Array.isArray(activeChat.admins)) {
+        return activeChat.admins.some((admin) => {
+          const adminUserId = typeof admin === 'string' ? admin : admin?._id;
+          return adminUserId === currentUser._id;
+        });
+      }
       return false;
     }
 
@@ -315,10 +326,22 @@ const blockingStatus = useMemo(() => {
   // For broadcast channels, check if user has admin permissions
   if (activeChat.type === "broadcast") {
     console.log("ChatInfo", activeChat.admin, currentUser._id);
-    const isAdmin =
-      activeChat.admin === currentUser._id ||
-      (activeChat.admins &&
-        activeChat.admins.some((admin) => admin._id === currentUser._id));
+    
+    // Check main admin - handle both string and object formats
+    const mainAdminId = typeof activeChat.admin === 'string' 
+      ? activeChat.admin 
+      : activeChat.admin?._id;
+    
+    const isMainAdmin = mainAdminId === currentUser._id;
+    
+    // Check admins array - handle mixed formats
+    const isAdditionalAdmin = activeChat.admins && Array.isArray(activeChat.admins) &&
+      activeChat.admins.some((admin) => {
+        const adminUserId = typeof admin === 'string' ? admin : admin?._id;
+        return adminUserId === currentUser._id;
+      });
+    
+    const isAdmin = isMainAdmin || isAdditionalAdmin;
 
     if (!isAdmin) {
       return {
@@ -382,8 +405,12 @@ const blockingStatus = useMemo(() => {
         >
           <Lock className="w-5 h-5 text-gray-500" />
           <span className="text-gray-500 text-sm">
-            Only administrators can send messages in this{" "}
-            {activeChat?.type === "broadcast" ? "channel" : "conversation"}
+            {activeChat?.userLeft 
+              ? "You have left this conversation"
+              : `Only administrators can send messages in this ${
+                  activeChat?.type === "broadcast" ? "channel" : "conversation"
+                }`
+            }
           </span>
         </div>
       </div>
