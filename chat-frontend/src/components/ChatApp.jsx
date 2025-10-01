@@ -145,6 +145,11 @@ const ChatApp = () => {
       return;
     }
 
+    // Don't show popup notifications for system messages
+    if (message.messageType === 'system') {
+      return;
+    }
+
     const notificationId = `${message._id}-${Date.now()}`;
     
     // Create message preview
@@ -156,6 +161,12 @@ const ChatApp = () => {
                       message.messageType === 'audio' ? '🎵' :
                       message.messageType === 'pdf' ? '📄' : '📎';
       messagePreview = `${fileIcon} ${fileName}`;
+    }
+
+    // For group/broadcast conversations, add sender name
+    if (conversation.type === 'group' || conversation.type === 'broadcast') {
+      const senderName = sender.name || 'Someone';
+      messagePreview = `${senderName}: ${messagePreview}`;
     }
 
     const newNotification = {
@@ -745,20 +756,15 @@ const ChatApp = () => {
             p.role === "admin" &&
             conversation.admins?.some((admin) => admin._id === p.user._id)
         );
-        if (newAdmin && newAdmin.user._id !== currentUser._id) {
-          showNotification(
-            `${newAdmin.user.name} was promoted to administrator`,
-            "info"
-          );
-        }
+        // Removed admin promotion notifications
       } else if (updateType === "admin_removed") {
-        showNotification("Administrator permissions updated", "info");
+        // Removed admin removal notifications
       } else if (updateType === "participant_added") {
-        showNotification("New member joined", "info");
+        // Removed member joined notifications
       } else if (updateType === "participant_removed") {
-        showNotification("Member left the conversation", "info");
+        // Removed member left notifications
       } else if (updateType === "settings_updated") {
-        showNotification("Conversation settings updated", "info");
+        // Removed settings updated notifications
       }
     });
 
@@ -813,7 +819,7 @@ const ChatApp = () => {
         })
       );
 
-      showNotification(`You blocked ${blockedUser.name}`, "info");
+      // Removed blocking notification
     });
 
     socketService.onUserUnblocked((data) => {
@@ -864,7 +870,7 @@ const ChatApp = () => {
         })
       );
 
-      showNotification(`You unblocked ${unblockedUser.name}`, "success");
+      // Removed unblocking notification
     });
 
     socketService.onUserBlockedYou((data) => {
@@ -921,7 +927,7 @@ const ChatApp = () => {
         }
       }
 
-      showNotification(`${blockedByUser.name} blocked you`, "warning");
+      // Removed "blocked you" notification
     });
 
     socketService.onUserUnblockedYou((data) => {
@@ -978,7 +984,7 @@ const ChatApp = () => {
         }
       }
 
-      showNotification(`${unblockedByUser.name} unblocked you`, "success");
+      // Removed "unblocked you" notification
     });
 
     // 🆕 CONVERSATION LEFT SOCKET EVENT
@@ -1002,7 +1008,7 @@ const ChatApp = () => {
         setActiveChat(null);
       }
 
-      showNotification("You left the conversation", "info");
+      // Removed "left conversation" notification
     });
 
     socketService.onAdminTransferred((data) => {
@@ -1027,14 +1033,7 @@ const ChatApp = () => {
         setActiveChat(conversation);
       }
 
-      if (newAdminId === currentUser._id) {
-        showNotification(
-          `You are now the administrator (${previousAdminName} left)`,
-          "success"
-        );
-      } else {
-        showNotification(`${newAdminName} is now the administrator`, "info");
-      }
+      // Removed admin transfer notifications
     });
 
     // 🆕 PROMOTED TO ADMIN SOCKET EVENT
@@ -1047,10 +1046,7 @@ const ChatApp = () => {
         timestamp,
       } = data;
 
-      showNotification(
-        `You were promoted to administrator of ${conversationName}`,
-        "success"
-      );
+      // Removed admin promotion notification
     });
 
     // 🆕 CONVERSATION CLEARED SOCKET EVENT
@@ -1076,7 +1072,7 @@ const ChatApp = () => {
         )
       );
 
-      showNotification("Chat cleared", "info");
+      // Removed chat cleared notification
     });
 
     // Handle conversation hidden
@@ -1110,7 +1106,7 @@ const ChatApp = () => {
       fetchMessages(conversationId);
       
       // Show notification that conversation reappeared
-      showNotification("A conversation has reappeared due to a new message", "error");
+      // Removed conversation reappeared notification
     });
 
     // Handle conversation deleted
@@ -1621,12 +1617,11 @@ const ChatApp = () => {
       // Validate file
       const validation = validateFile(file);
       if (!validation.valid) {
-        showNotification(validation.error, "error");
+        // Removed file validation error notification
         return;
       }
 
-      // Show upload progress
-      showNotification("Uploading file...", "success");
+      // Removed upload progress notification
 
       // Upload file to cloud storage
       const uploadResult = await fileUploadService.uploadFile(file);
@@ -1712,7 +1707,7 @@ const ChatApp = () => {
       }));
     } catch (error) {
       console.error("Failed to send file:", error);
-      showNotification(`Failed to send file: ${error.message}`, "error");
+      // Removed file upload error notification
     }
   };
 
@@ -2335,13 +2330,13 @@ const ChatApp = () => {
           setActiveChat(result.data);
         }
 
-        showNotification("Admin added successfully", "success");
+        // Removed admin added success notification
       } else {
         throw new Error(result.message || "Failed to add admin");
       }
     } catch (error) {
       console.error("Failed to add admin:", error);
-      showNotification("Failed to add admin. Please try again.", "error");
+      // Removed admin add error notification
     }
   };
 
@@ -2369,13 +2364,13 @@ const ChatApp = () => {
           setActiveChat(result.data);
         }
 
-        showNotification("Admin removed successfully", "success");
+        // Removed admin removed success notification
       } else {
         throw new Error(result.message || "Failed to remove admin");
       }
     } catch (error) {
       console.error("Failed to remove admin:", error);
-      showNotification("Failed to remove admin. Please try again.", "error");
+      // Removed admin remove error notification
     }
   };
 
@@ -2601,7 +2596,7 @@ const ChatApp = () => {
             ? "unblocked"
             : "blocked";
 
-        showNotification(`User ${action} successfully`, "success");
+        // Removed block/unblock success notification
 
         return result;
       } else {
@@ -2807,7 +2802,6 @@ const ChatApp = () => {
         onDismiss={dismissNotification}
         isDark={isDark}
       />
-
 
       <ChatLayout
         messages={messages}

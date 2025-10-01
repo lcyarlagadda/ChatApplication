@@ -509,51 +509,13 @@ router.post('/:id/admins', async (req, res) => {
       { path: 'admins', select: 'name email avatar' }
     ]);
     
-    // Get user info for system message
-    const newAdmin = await User.findById(userId);
-    
-    // Create system message
-    const systemMessage = new Message({
-      conversation: conversation._id,
-      sender: currentUserId,
-      content: `${req.user.name} promoted ${newAdmin.name} to administrator`,
-      messageType: 'system'
-    });
-    await systemMessage.save();
-    await systemMessage.populate('sender', 'name avatar');
-    
-    // Update conversation's last message
-    await conversation.updateLastMessage({
-      content: systemMessage.content,
-      _id: systemMessage._id,
-      sender: systemMessage.sender._id,
-      timestamp: systemMessage.createdAt,
-      messageType: 'system'
-    });
+    // Removed admin promotion system message creation
     
     // ENHANCED: Emit Socket.IO events for immediate updates
     if (req.socketService) {
-      // Notify all participants about the conversation update
-      conversation.participants.forEach(participant => {
-        req.socketService.sendNotificationToUser(
-          participant.user._id.toString(),
-          'conversation_updated',
-          { 
-            conversation: conversation.toObject(),
-            updateType: 'admin_added'
-          }
-        );
-      });
+      // Removed admin added notification broadcast
       
-      // Also send the new system message
-      req.socketService.sendNotificationToConversation(
-        id,
-        'new_message',
-        { 
-          conversationId: id,
-          message: systemMessage.toObject()
-        }
-      );
+      // Removed system message socket event
 
       // Make hidden conversations reappear for all participants when system message arrives
       await req.socketService.makeHiddenConversationReappear(id, req.user.id);
@@ -650,17 +612,7 @@ router.delete('/:id/admins/:adminId', async (req, res) => {
     
     // ENHANCED: Emit Socket.IO events for immediate updates
     if (req.socketService) {
-      // Notify all participants about the conversation update
-      conversation.participants.forEach(participant => {
-        req.socketService.sendNotificationToUser(
-          participant.user._id.toString(),
-          'conversation_updated',
-          { 
-            conversation: conversation.toObject(),
-            updateType: 'admin_removed'
-          }
-        );
-      });
+      // Removed admin removed notification broadcast
       
       // Also send the new system message
       req.socketService.sendNotificationToConversation(
@@ -844,22 +796,17 @@ router.post('/:conversationId/delete', auth, async (req, res) => {
     );
     
     if (participant) {
-      console.log(`🗑️ DELETE CHAT: Before deletion - User ${userId}, isHidden: ${participant.isHidden}, hiddenAt: ${participant.hiddenAt}`);
-      
       participant.isHidden = true;
       participant.hiddenAt = new Date();
       participant.lastRead = new Date(); // Mark as read to prevent unread notifications
       await conversation.save();
       
-      console.log(`🗑️ DELETE CHAT: After deletion - User ${userId} deleted conversation ${conversationId}`);
-      console.log(`🗑️ DELETE CHAT: Participant isHidden set to: ${participant.isHidden}, hiddenAt: ${participant.hiddenAt}`);
       
       // Verify the change was saved
       const updatedConversation = await Conversation.findById(conversationId);
       const updatedParticipant = updatedConversation.participants.find(
         p => p.user._id.toString() === userId.toString()
       );
-      console.log(`🗑️ DELETE CHAT: Verification - isHidden: ${updatedParticipant?.isHidden}, hiddenAt: ${updatedParticipant?.hiddenAt}`);
     }
 
     // Emit socket event to notify only this user

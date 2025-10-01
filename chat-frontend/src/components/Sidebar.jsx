@@ -32,7 +32,8 @@ const Sidebar = ({
   onStartConversation, 
   onConversationViewed, 
   onDeleteConversation, 
-  messages 
+  messages,
+  onConversationSelect 
 }) => {
   const { 
     currentUser, 
@@ -539,6 +540,11 @@ const getLastMessagePreview = (conversation) => {
   const handleConversationClick = (conversation) => {
     setActiveChat(conversation);
     
+    // Call mobile callback if provided
+    if (typeof onConversationSelect === 'function') {
+      onConversationSelect(conversation);
+    }
+    
     if (typeof onConversationViewed === 'function') {
       onConversationViewed(conversation._id);
     }
@@ -618,12 +624,12 @@ const getLastMessagePreview = (conversation) => {
 
   return (
     <>
-      <div className={`w-80 flex flex-col ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"} border-r`}>
+      <div className={`w-full md:w-80 h-full flex flex-col ${isDark ? "bg-gradient-to-b from-gray-900 to-gray-800" : "bg-white"} border-r ${isDark ? "border-gray-800" : "border-gray-200"}`}>
         {/* Header */}
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+        <div className={`p-4 border-b ${isDark ? "border-gray-800" : "border-gray-200"}`}>
           <div className="flex items-center justify-between mb-4">
             <div
-              className="flex items-center space-x-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 p-2 rounded-lg transition-colors"
+              className={`flex items-center space-x-3 cursor-pointer hover:bg-gray-100 ${isDark ? 'hover:bg-gray-700/30' : ''} p-2 rounded-lg transition-all duration-200`}
               onClick={() => onProfileClick(currentUser)}
             >
               <div className="relative">
@@ -641,8 +647,8 @@ const getLastMessagePreview = (conversation) => {
                 )}
               </div>
               <div>
-                <h2 className="font-semibold">{currentUser?.name || "User"}</h2>
-                <p className="text-sm text-gray-500 capitalize">
+                <h2 className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>{currentUser?.name || "User"}</h2>
+                <p className={`text-sm capitalize ${isDark ? "text-gray-400" : "text-gray-500"}`}>
                   {currentUser?.status || "Online"}
                 </p>
               </div>
@@ -651,7 +657,7 @@ const getLastMessagePreview = (conversation) => {
             <div className="flex space-x-2">
               <button
                 onClick={toggleDarkMode}
-                className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 ${isDark ? 'text-yellow-400' : 'text-gray-600'}`}
+                className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/30 ${isDark ? 'text-yellow-400' : 'text-gray-600'}`}
                 title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
               >
                 {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
@@ -661,7 +667,7 @@ const getLastMessagePreview = (conversation) => {
               <div className="relative new-chat-menu">
                 <button
                   onClick={handleNewChatClick}
-                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group"
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/30 transition-colors group"
                   title="Start new conversation"
                 >
                   <Plus className={`w-5 h-5 transition-all ${showNewChatMenu ? 'rotate-45' : ''} group-hover:text-blue-500`} />
@@ -670,12 +676,12 @@ const getLastMessagePreview = (conversation) => {
                 {/* Dropdown Menu */}
                 {showNewChatMenu && (
                   <div className={`absolute right-0 top-full mt-2 w-52 rounded-lg shadow-lg border z-50 ${
-                    isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'
+                    isDark ? 'bg-gray-700 border-gray-800' : 'bg-white border-gray-200'
                   }`}>
                     <div className="py-2">
                       <button
                         onClick={() => handleMenuOptionClick('direct')}
-                        className={`w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center space-x-3 ${
+                        className={`w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700/40 transition-colors flex items-center space-x-3 ${
                           isDark ? 'text-white' : 'text-gray-700'
                         }`}
                       >
@@ -684,7 +690,7 @@ const getLastMessagePreview = (conversation) => {
                       </button>
                       <button
                         onClick={() => handleMenuOptionClick('group')}
-                        className={`w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center space-x-3 ${
+                        className={`w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700/40 transition-colors flex items-center space-x-3 ${
                           isDark ? 'text-white' : 'text-gray-700'
                         }`}
                       >
@@ -693,7 +699,7 @@ const getLastMessagePreview = (conversation) => {
                       </button>
                       <button
                         onClick={() => handleMenuOptionClick('broadcast')}
-                        className={`w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center space-x-3 ${
+                        className={`w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700/40 transition-colors flex items-center space-x-3 ${
                           isDark ? 'text-white' : 'text-gray-700'
                         }`}
                       >
@@ -707,7 +713,7 @@ const getLastMessagePreview = (conversation) => {
               
               <button
                 onClick={handleLogout}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/30 text-gray-600 dark:text-gray-400"
                 title="Logout"
               >
                 <LogOut className="w-5 h-5" />
@@ -718,22 +724,22 @@ const getLastMessagePreview = (conversation) => {
           {/* Enhanced Search */}
           <div className="space-y-2">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-400" />
               <input
                 type="text"
-                placeholder="Search conversations and messages..."
+                placeholder="Search messages and users..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className={`w-full pl-10 pr-10 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
                   isDark
-                    ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                    ? "bg-gray-800/50 border-gray-800 text-white placeholder-gray-400 backdrop-blur-sm"
                     : "bg-gray-50 border-gray-300"
                 }`}
               />
               {searchQuery && (
                 <button
                   onClick={clearSearch}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700/40 transition-all duration-200"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -742,7 +748,7 @@ const getLastMessagePreview = (conversation) => {
                 <button
                   onClick={() => setShowSearchFilters(!showSearchFilters)}
                   className={`absolute right-8 top-1/2 transform -translate-y-1/2 p-1 rounded transition-colors ${
-                    showSearchFilters ? 'text-blue-500' : 'text-gray-400 hover:text-gray-600'
+                    showSearchFilters ? 'text-blue-500' : 'text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-300'
                   }`}
                 >
                   <Filter className="w-3 h-3" />
@@ -753,7 +759,7 @@ const getLastMessagePreview = (conversation) => {
             {/* Search Filters */}
             {showSearchFilters && (
               <div className={`p-3 rounded-lg border ${
-                isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'
+                isDark ? 'bg-gray-700/50 border-gray-800 backdrop-blur-sm' : 'bg-gray-50 border-gray-200'
               }`}>
                 <div className="flex space-x-2 text-xs">
                   {[
@@ -786,7 +792,7 @@ const getLastMessagePreview = (conversation) => {
                   <button
                     key={index}
                     onClick={() => setSearchQuery(term)}
-                    className="ml-1 px-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                    className="ml-1 px-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700/40"
                   >
                     {term}
                   </button>
@@ -798,16 +804,16 @@ const getLastMessagePreview = (conversation) => {
 
 
         {/* Search Results or Conversations */}
-        <div className="flex-1 overflow-y-auto">
+        <div className={`flex-1 overflow-y-auto border-r ${isDark ? "border-gray-800" : "border-gray-200"}`}>
           {isSearching && (
             <div className="p-4 text-center">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto mb-2"></div>
-              <p className="text-sm text-gray-500">Searching...</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Searching...</p>
             </div>
           )}
 
           {searchQuery && searchResults.length === 0 && !isSearching && (
-            <div className="p-4 text-center text-gray-500">
+            <div className="p-4 text-center text-gray-500 dark:text-gray-400">
               <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
               <p>No results found</p>
               <p className="text-xs mt-1">Try different keywords</p>
@@ -817,15 +823,15 @@ const getLastMessagePreview = (conversation) => {
           {/* Search Results */}
           {searchQuery && searchResults.length > 0 && (
             <div className="p-2">
-              <div className="text-xs text-gray-500 px-2 py-1 mb-2">
+              <div className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 mb-2">
                 {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} found
               </div>
               {searchResults.map((result, index) => (
                 <div
                   key={`${result.type}-${index}`}
                   onClick={() => handleSearchResultClick(result)}
-                  className={`p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg mb-1 transition-colors ${
-                    activeChat?._id === result.conversation._id ? 'bg-blue-50 dark:bg-gray-600' : ''
+                  className={`p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40 rounded-lg mb-1 transition-colors ${
+                    activeChat?._id === result.conversation._id ? 'bg-blue-50 dark:bg-gray-700/50' : ''
                   }`}
                 >
                   <div className="flex items-start space-x-3">
@@ -878,14 +884,14 @@ const getLastMessagePreview = (conversation) => {
                       
                       {result.type === 'user' ? (
                         <>
-                          <h4 className="font-medium text-sm text-gray-900 dark:text-white truncate" title={result.conversation.name || result.user?.name || 'Unknown'}>
+                          <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"} truncate`} title={result.conversation.name || result.user?.name || 'Unknown'}>
                             {(() => {
                               const name = result.conversation.name || result.user?.name || 'Unknown';
                               return name.length > 20 ? `${name.substring(0, 20)}...` : name;
                             })()}
                           </h4>
                           {result.conversation.type === 'direct' && result.user?.email && (
-                            <p className="text-xs text-gray-500 truncate">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                               {result.user.email}
                             </p>
                           )}
@@ -896,21 +902,21 @@ const getLastMessagePreview = (conversation) => {
                       ) : (
                         <>
                           <div className="flex items-center space-x-2 mb-1">
-                            <h4 className="font-medium text-sm text-gray-900 dark:text-white truncate" title={result.user?.name || 'Unknown User'}>
+                            <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"} truncate`} title={result.user?.name || 'Unknown User'}>
                               {(() => {
                                 const name = result.user?.name || 'Unknown User';
                                 return name.length > 20 ? `${name.substring(0, 20)}...` : name;
                               })()}
                             </h4>
-                            <span className="text-xs text-gray-400">in</span>
-                            <span className="text-xs text-gray-500 truncate" title={getConversationInfo(result.conversation).name}>
+                            <span className="text-xs text-gray-400 dark:text-gray-400">in</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400 truncate" title={getConversationInfo(result.conversation).name}>
                               {(() => {
                                 const name = getConversationInfo(result.conversation).name;
                                 return name.length > 20 ? `${name.substring(0, 20)}...` : name;
                               })()}
                             </span>
                           </div>
-                          <div className="text-xs text-gray-500 mb-1">
+                          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
                             <Calendar className="w-3 h-3 inline mr-1" />
                             {formatTime(result.message.createdAt)}
                           </div>
@@ -930,7 +936,7 @@ const getLastMessagePreview = (conversation) => {
 
           {/* Regular Conversations */}
           {!searchQuery && sortedConversations.length === 0 && (
-            <div className="p-4 text-center text-gray-500">
+            <div className="p-4 text-center text-gray-500 dark:text-gray-400">
               <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
               <p>No conversations yet</p>
               <p className="text-sm mt-1">Start a new conversation to get started!</p>
@@ -949,8 +955,8 @@ const getLastMessagePreview = (conversation) => {
               <div
                 key={conversation._id}
                 onClick={() => handleConversationClick(conversation)}
-                className={`p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 transition-colors group ${
-                  isActive ? "bg-blue-50 dark:bg-gray-700 border-r-4 border-r-blue-500" : ""
+                className={`p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/20 border-b ${isDark ? "border-gray-800/50" : "border-gray-100"} transition-all duration-200 group ${
+                  isActive ? "bg-blue-50 dark:bg-blue-900/20 border-r-4 border-r-blue-500" : ""
                 }`}
               >
                 <div className="flex items-center space-x-3">
@@ -977,20 +983,6 @@ const getLastMessagePreview = (conversation) => {
                       <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-800"></div>
                     ) : null}
 
-                    {/* Broadcast indicator */}
-                    {convInfo.isBroadcast && (
-                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-purple-500 rounded-full flex items-center justify-center">
-                        <Radio className="w-2 h-2 text-white" />
-                      </div>
-                    )}
-
-                    {/* Group indicator */}
-                    {convInfo.isGroup && (
-                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
-                        <Hash className="w-2 h-2 text-white" />
-                      </div>
-                    )}
-
                     {/* Hide unread count if blocked */}
                     {unreadCount > 0 && !blockedStatus.isBlocked && (
                       <div className="absolute -top-2 -right-2 min-w-5 h-5 bg-red-500 rounded-full flex items-center justify-center px-1">
@@ -1003,19 +995,13 @@ const getLastMessagePreview = (conversation) => {
 
                   {/* Conversation info with blocked status */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <h3 className={`font-semibold flex items-center space-x-1 ${
-                        unreadCount > 0 && !blockedStatus.isBlocked ? 'text-gray-900 dark:text-white' : ''
-                      }`}>
-                        <span className="text-black-800 dark:text-green-800 truncate min-w-0 flex-1" title={convInfo.name}>
+                    <div className="flex items-start justify-between">
+                      <h3 className={`font-semibold flex items-center space-x-1 flex-1 min-w-0 ${isDark ? "text-white" : "text-gray-900"}`}>
+                        <span className={`${isDark ? "text-white" : "text-gray-900"} truncate min-w-0`} title={convInfo.name}>
                           {convInfo.name && convInfo.name.length > 20 
                             ? `${convInfo.name.substring(0, 20)}...` 
                             : convInfo.name}
                         </span>
-                        {/* Show blocked icon next to name */}
-                        {conversation.type === 'direct' && blockedStatus.isBlocked && (
-                          <UserX className="w-3 h-3 text-red-500 flex-shrink-0" />
-                        )}
                         {/* Admin crown for group/broadcast admins */}
                         {(conversation.type === "group" || conversation.type === "broadcast") && 
                           (() => {
@@ -1023,15 +1009,17 @@ const getLastMessagePreview = (conversation) => {
                             if (adminStatus === 'main') {
                               return (
                                 <Crown 
-                                  className="w-3 h-3 text-yellow-500" 
+                                  className="w-3 h-3 text-yellow-500 fill-current flex-shrink-0" 
                                   title="You are the main administrator" 
                                 />
                               );
                             } else if (adminStatus === 'admin') {
                               return (
                                 <Crown 
-                                  className="w-3 h-3 text-yellow-400" 
+                                  className="w-3 h-3 text-yellow-400 flex-shrink-0" 
                                   title="You are an administrator" 
+                                  fill="none"
+                                  stroke="currentColor"
                                 />
                               );
                             }
@@ -1039,36 +1027,34 @@ const getLastMessagePreview = (conversation) => {
                           })()}
                       </h3>
                       
-                      <div className="flex items-center space-x-1">
-                        {/* Last message timestamp */}
-                        {conversation.lastMessage?.timestamp && (
-                          <span className={`text-xs ${
-                            unreadCount > 0 && !blockedStatus.isBlocked
-                              ? 'text-blue-500 dark:text-blue-400 font-medium' 
-                              : 'text-gray-500'
-                          }`}>
-                            {formatTime(conversation.lastMessage.timestamp)}
-                          </span>
-                        )}
-                        
-                        {/* Delete button (only for admins of groups/broadcasts or all participants for direct) */}
-                        {canDeleteConversation(conversation) && (
-                          <button
-                            onClick={(e) => handleDeleteConversation(e, conversation)}
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-100 dark:hover:bg-red-900 text-red-500 hover:text-red-700 transition-all"
-                            title={`Delete ${convInfo.isBroadcast ? 'channel' : convInfo.isGroup ? 'group' : 'conversation'}`}
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
+                      {/* Last message timestamp - positioned at extreme right */}
+                      {conversation.lastMessage?.timestamp && (
+                        <span className={`text-xs flex-shrink-0 ml-2 ${
+                          unreadCount > 0 && !blockedStatus.isBlocked
+                            ? 'text-blue-500 dark:text-blue-400 font-medium' 
+                            : 'text-gray-500 dark:text-gray-400'
+                        }`}>
+                          {formatTime(conversation.lastMessage.timestamp)}
+                        </span>
+                      )}
+                      
+                      {/* Delete button (only for admins of groups/broadcasts or all participants for direct) */}
+                      {canDeleteConversation(conversation) && (
+                        <button
+                          onClick={(e) => handleDeleteConversation(e, conversation)}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/50 text-red-500 hover:text-red-700 transition-all duration-200 flex-shrink-0 ml-1"
+                          title={`Delete ${convInfo.isBroadcast ? 'channel' : convInfo.isGroup ? 'group' : 'conversation'}`}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-between">
                       <p className={`text-sm truncate ${
                         unreadCount > 0 && !blockedStatus.isBlocked
                           ? 'text-gray-700 dark:text-gray-200 font-medium' 
-                          : 'text-gray-500'
+                          : 'text-gray-500 dark:text-gray-400'
                       }`}>
                         {/* Show blocked status or last message */}
                         { conversation.lastMessage ? (
@@ -1087,40 +1073,9 @@ const getLastMessagePreview = (conversation) => {
 
                     {/* Conversation status/info */}
                     <div className="flex items-center justify-between mt-1">
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-gray-400 dark:text-gray-400">
                         {convInfo.status}
                       </p>
-                      {(convInfo.isBroadcast || convInfo.isGroup) && (() => {
-                        const adminStatus = isUserAdmin(conversation, currentUser?._id);
-                        if (adminStatus === 'main') {
-                          return (
-                            <span className="text-xs text-yellow-500 dark:text-yellow-400 font-medium flex items-center space-x-1">
-                              <Crown className="w-2.5 h-2.5" />
-                              <span>Main Admin</span>
-                            </span>
-                          );
-                        } else if (adminStatus === 'admin') {
-                          return (
-                            <span className="text-xs text-yellow-400 dark:text-yellow-300 font-medium flex items-center space-x-1">
-                              <Crown className="w-2.5 h-2.5" />
-                              <span>Admin</span>
-                            </span>
-                          );
-                        } else if (convInfo.isBroadcast) {
-                          return (
-                            <span className="text-xs text-purple-500 dark:text-purple-400 font-medium">
-                              Read-only
-                            </span>
-                          );
-                        }
-                        return null;
-                      })()}
-                      {conversation.type === 'direct' && blockedStatus.isBlocked && (
-                        <span className="text-xs text-red-500 font-medium flex items-center space-x-1">
-                          <Shield className="w-2.5 h-2.5" />
-                          <span>Blocked</span>
-                        </span>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -1131,8 +1086,8 @@ const getLastMessagePreview = (conversation) => {
 
         {/* Footer with total unread indicator */}
         {totalUnreadCount > 0 && (
-          <div className={`p-3 border-t border-gray-200 dark:border-gray-700 ${
-            isDark ? 'bg-gray-800' : 'bg-gray-50'
+          <div className={`p-3 border-t ${isDark ? "border-gray-800/50" : "border-gray-200"} border-r ${
+            isDark ? 'bg-gray-800/50 backdrop-blur-sm border-gray-800' : 'bg-gray-50 border-gray-200'
           }`}>
             <div className="flex items-center justify-center space-x-2">
               <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>

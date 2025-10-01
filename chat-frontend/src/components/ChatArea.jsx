@@ -5,7 +5,7 @@ import ChatHeader from './ChatHeader';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import ConfirmationModal from './Modals/ConfirmationModal';
-import { Trash2, UserX, LogOut } from 'lucide-react';
+import { Trash2, UserX, LogOut, Eraser } from 'lucide-react';
 
 const ChatArea = ({
   messages,
@@ -103,7 +103,7 @@ const ChatArea = ({
       details: 'This action cannot be undone. All messages, files, and media will be permanently deleted from this chat.',
       confirmText: 'Clear Chat',
       cancelText: 'Keep Messages',
-      icon: Trash2,
+      icon: Eraser,
       onConfirm: async () => {
         try {
           await onClearChat(conversationId);

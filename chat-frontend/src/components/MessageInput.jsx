@@ -395,7 +395,7 @@ const blockingStatus = useMemo(() => {
     return (
       <div
         className={`p-4 border-t ${
-          isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
+          isDark ? "bg-gray-800 border-gray-800" : "bg-white border-gray-200"
         }`}
       >
         <div
@@ -423,7 +423,7 @@ const blockingStatus = useMemo(() => {
         <div
           className={`px-4 py-2 border-t ${
             isDark
-              ? "bg-gray-800 border-gray-700"
+              ? "bg-gray-800 border-gray-800"
               : "bg-gray-50 border-gray-200"
           }`}
         >
@@ -453,158 +453,103 @@ const blockingStatus = useMemo(() => {
         </div>
       )}
 
-      {/* Show blocking message if applicable - key prop forces re-render */}
-      {blockingStatus.isBlocked && (
-        <div
-          key={`blocking-${blockingStatus.type}-${
-            blockingStatus.otherUserId || "general"
-          }`}
-          className={`px-4 py-3 border-t ${
-            isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
-          }`}
-        >
-          <div
-            className={`p-3 rounded-lg text-center text-sm ${
-              blockingStatus.type === "you_blocked_them"
-                ? isDark
-                  ? "bg-orange-900/50 text-orange-200 border border-orange-800"
-                  : "bg-orange-50 text-orange-700 border border-orange-200"
-                : blockingStatus.type === "they_blocked_you"
-                ? isDark
-                  ? "bg-red-900/50 text-red-200 border border-red-800"
-                  : "bg-red-50 text-red-700 border border-red-200"
-                : isDark
-                ? "bg-gray-700 text-gray-300 border border-gray-600"
-                : "bg-gray-50 text-gray-600 border border-gray-200"
-            }`}
-          >
-            <div className="flex items-center justify-center space-x-2">
-              {blockingStatus.type === "you_blocked_them" && (
-                <div className="w-4 h-4 rounded-full bg-orange-500"></div>
-              )}
-              {blockingStatus.type === "they_blocked_you" && (
-                <div className="w-4 h-4 rounded-full bg-red-500"></div>
-              )}
-              {blockingStatus.type === "no_broadcast_permission" && (
-                <div className="w-4 h-4 rounded-full bg-gray-500"></div>
-              )}
-              <span>{blockingStatus.reason}</span>
-            </div>
-
-            {/* Show unblock option if current user blocked the other */}
-            {blockingStatus.type === "you_blocked_them" && onBlockUser && (
-              <button
-                onClick={() => handleUnblockUser(blockingStatus.otherUserId)}
-                disabled={sending}
-                className={`mt-2 px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 ${
-                  isDark
-                    ? "bg-orange-600 hover:bg-orange-700 text-white"
-                    : "bg-orange-600 hover:bg-orange-700 text-white"
-                }`}
-              >
-                {sending
-                  ? "Unblocking..."
-                  : `Unblock ${blockingStatus.otherUserName || "User"}`}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Message Input - key prop forces re-render when blocking status changes */}
       <div
         key={`input-${blockingStatus.isBlocked}-${
           blockingStatus.type || "none"
         }`}
-        className={`p-4 border-t relative ${
-          isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
+        className={`p-3 md:p-4 border-t relative ${
+          isDark ? "bg-gray-800 border-gray-800" : "bg-white border-gray-200"
         }`}
       >
-        <div className="flex items-end space-x-3">
-          {/* File upload */}
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileUpload}
-            className="hidden"
-            accept="image/*,.gif,.pdf,.doc,.docx,.txt,.zip,.rar"
-            disabled={sending || blockingStatus.isBlocked}
-          />
-          <button
-            onClick={() =>
-              !blockingStatus.isBlocked && fileInputRef.current?.click()
-            }
-            disabled={sending || blockingStatus.isBlocked}
-            className={`p-2 rounded-lg transition-colors ${
-              sending || blockingStatus.isBlocked
-                ? "opacity-50 cursor-not-allowed text-gray-400"
-                : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
-            }`}
-            title={
-              blockingStatus.isBlocked ? blockingStatus.reason : "Attach file"
-            }
-          >
-            <Paperclip className="w-5 h-5" />
-          </button>
-
-          {/* Emoji Picker */}
-          <div className="relative">
-            <button
-              onClick={() => !blockingStatus.isBlocked && handleEmojiToggle()}
+        <div className="flex items-end space-x-2 md:space-x-3">
+          {/* Action buttons - smaller on mobile */}
+          <div className="flex space-x-1 md:space-x-2 flex-shrink-0">
+            {/* File upload */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              className="hidden"
+              accept="image/*,.gif,.pdf,.doc,.docx,.txt,.zip,.rar"
               disabled={sending || blockingStatus.isBlocked}
-              className={`p-2 rounded-lg transition-colors ${
+            />
+            <button
+              onClick={() =>
+                !blockingStatus.isBlocked && fileInputRef.current?.click()
+              }
+              disabled={sending || blockingStatus.isBlocked}
+              className={`p-1.5 md:p-2 rounded-lg transition-colors ${
                 sending || blockingStatus.isBlocked
                   ? "opacity-50 cursor-not-allowed text-gray-400"
-                  : `hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 ${
-                      showEmojiPicker ? "bg-gray-100 dark:bg-gray-700" : ""
-                    }`
+                  : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
               }`}
               title={
-                blockingStatus.isBlocked ? blockingStatus.reason : "Add emoji"
+                blockingStatus.isBlocked ? blockingStatus.reason : "Attach file"
               }
             >
-              <Smile className="w-5 h-5" />
+              <Paperclip className="w-4 h-4 md:w-5 md:h-5" />
             </button>
 
-            {showEmojiPicker && !blockingStatus.isBlocked && (
-              <EmojiPicker
-                isDark={isDark}
-                onEmojiSelect={handleEmojiSelect}
-                onClose={() => setShowEmojiPicker(false)}
-              />
-            )}
-          </div>
+            {/* Emoji Picker */}
+            <div className="relative">
+              <button
+                onClick={() => !blockingStatus.isBlocked && handleEmojiToggle()}
+                disabled={sending || blockingStatus.isBlocked}
+                className={`p-1.5 md:p-2 rounded-lg transition-colors ${
+                  sending || blockingStatus.isBlocked
+                    ? "opacity-50 cursor-not-allowed text-gray-400"
+                    : `hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 ${
+                        showEmojiPicker ? "bg-gray-100 dark:bg-gray-700" : ""
+                      }`
+                }`}
+                title={
+                  blockingStatus.isBlocked ? blockingStatus.reason : "Add emoji"
+                }
+              >
+                <Smile className="w-4 h-4 md:w-5 md:h-5" />
+              </button>
 
-          {/* GIF Picker */}
-          <div className="relative">
-            <button
-              onClick={() => !blockingStatus.isBlocked && handleGifToggle()}
-              disabled={sending || blockingStatus.isBlocked}
-              className={`p-2 rounded-lg transition-colors ${
-                sending || blockingStatus.isBlocked
-                  ? "opacity-50 cursor-not-allowed text-gray-400"
-                  : `hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 ${
-                      showGifPicker ? "bg-gray-100 dark:bg-gray-700" : ""
-                    }`
-              }`}
-              title={
-                blockingStatus.isBlocked ? blockingStatus.reason : "Send GIF"
-              }
-            >
-              <ImageIcon className="w-5 h-5" />
-            </button>
+              {showEmojiPicker && !blockingStatus.isBlocked && (
+                <EmojiPicker
+                  isDark={isDark}
+                  onEmojiSelect={handleEmojiSelect}
+                  onClose={() => setShowEmojiPicker(false)}
+                />
+              )}
+            </div>
 
-            {showGifPicker && !blockingStatus.isBlocked && (
-              <GifPicker
-                isDark={isDark}
-                onGifSelect={handleGifSelect}
-                onClose={() => setShowGifPicker(false)}
-              />
-            )}
+            {/* GIF Picker */}
+            <div className="relative">
+              <button
+                onClick={() => !blockingStatus.isBlocked && handleGifToggle()}
+                disabled={sending || blockingStatus.isBlocked}
+                className={`p-1.5 md:p-2 rounded-lg transition-colors ${
+                  sending || blockingStatus.isBlocked
+                    ? "opacity-50 cursor-not-allowed text-gray-400"
+                    : `hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 ${
+                        showGifPicker ? "bg-gray-100 dark:bg-gray-700" : ""
+                      }`
+                }`}
+                title={
+                  blockingStatus.isBlocked ? blockingStatus.reason : "Send GIF"
+                }
+              >
+                <ImageIcon className="w-4 h-4 md:w-5 md:h-5" />
+              </button>
+
+              {showGifPicker && !blockingStatus.isBlocked && (
+                <GifPicker
+                  isDark={isDark}
+                  onGifSelect={handleGifSelect}
+                  onClose={() => setShowGifPicker(false)}
+                />
+              )}
+            </div>
           </div>
 
           {/* Text input */}
-          <div className="flex-1 relative">
+          <div className="flex-1 relative min-w-0">
             <textarea
               key={`textarea-${blockingStatus.isBlocked}`} // Force re-render
               value={blockingStatus.isBlocked ? "" : message}
@@ -632,17 +577,17 @@ const blockingStatus = useMemo(() => {
               }
               disabled={sending || blockingStatus.isBlocked}
               rows={1}
-              className={`w-full px-4 py-3 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-all ${
+              className={`w-full px-3 md:px-4 py-2 md:py-3 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-all ${
                 sending || blockingStatus.isBlocked
                   ? "opacity-50 cursor-not-allowed"
                   : ""
               } ${
                 isDark
-                  ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                  ? "bg-gray-700 border-gray-800 text-white placeholder-gray-400"
                   : "bg-gray-50 border-gray-300 placeholder-gray-500"
               }`}
               style={{
-                minHeight: "48px",
+                minHeight: "40px",
                 maxHeight: "120px",
               }}
             />
@@ -659,7 +604,7 @@ const blockingStatus = useMemo(() => {
           <button
             onClick={() => !blockingStatus.isBlocked && sendMessage()}
             disabled={!message.trim() || sending || blockingStatus.isBlocked}
-            className={`p-3 rounded-lg font-semibold transition-all transform ${
+            className={`p-2 md:p-3 rounded-lg font-semibold transition-all transform flex-shrink-0 ${
               blockingStatus.isBlocked
                 ? "bg-gray-400 text-gray-600 cursor-not-allowed"
                 : activeChat?.type === "broadcast"
@@ -678,7 +623,7 @@ const blockingStatus = useMemo(() => {
                 : "Send message"
             }
           >
-            <Send className={`w-5 h-5 ${sending ? "animate-pulse" : ""}`} />
+            <Send className={`w-4 h-4 md:w-5 md:h-5 ${sending ? "animate-pulse" : ""}`} />
           </button>
         </div>
 

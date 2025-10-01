@@ -15,6 +15,7 @@ import {
   Search,
   User2,
   AlertTriangle,
+  Eraser,
 } from "lucide-react";
 import { formatTime } from "../../utils/helpers";
 import { usersService } from "../../api/users";
@@ -60,12 +61,12 @@ const ConfirmationModal = ({
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
       onClick={onCancel}
     >
       <div
-        className={`max-w-md w-full rounded-lg shadow-xl ${
-          isDark ? "bg-gray-800 text-white" : "bg-white"
+        className={`max-w-md w-full rounded-lg shadow-xl backdrop-blur-md ${
+          isDark ? "bg-gray-800/90 text-white" : "bg-white"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
@@ -84,7 +85,7 @@ const ConfirmationModal = ({
               onClick={onCancel}
               className={`px-4 py-2 rounded-lg border transition-colors ${
                 isDark
-                  ? "border-gray-600 hover:bg-gray-700 text-gray-300"
+                  ? "border-gray-600 hover:bg-gray-700/30 backdrop-blur-sm text-gray-300"
                   : "border-gray-300 hover:bg-gray-50 text-gray-700"
               }`}
             >
@@ -517,7 +518,7 @@ const isUserAdmin = (userId) => {
       return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
     if (adminStatus === "admin")
       return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
-    return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200";
+    return "bg-gray-100 text-gray-800 dark:bg-gray-700/50 backdrop-blur-sm dark:text-gray-200";
   };
 
   // Sort participants: Main admin first, then admins, then regular members
@@ -535,10 +536,10 @@ const isUserAdmin = (userId) => {
 
   return (
     <>
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
         <div
-          className={`w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-2xl shadow-2xl ${
-            isDark ? "bg-gray-800 text-white" : "bg-white"
+          className={`w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-2xl shadow-2xl backdrop-blur-md ${
+            isDark ? "bg-gray-800/90 text-white" : "bg-white"
           }`}
         >
           {/* Header */}
@@ -585,7 +586,7 @@ const isUserAdmin = (userId) => {
                       )}
                     </h2>
                   )}
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
                     {conversation.participants.length}{" "}
                     {isBroadcast ? "subscribers" : "members"}
                     {conversation.admins && conversation.admins.length > 0 && (
@@ -601,7 +602,7 @@ const isUserAdmin = (userId) => {
                 {isAdmin && (
                   <button
                     onClick={() => setIsEditing(!isEditing)}
-                    className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/30 backdrop-blur-sm transition-colors"
                     title="Edit conversation"
                   >
                     <Edit3 className="w-5 h-5" />
@@ -609,7 +610,7 @@ const isUserAdmin = (userId) => {
                 )}
                 <button
                   onClick={onClose}
-                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50 backdrop-blur-sm transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -629,7 +630,7 @@ const isUserAdmin = (userId) => {
                     }
                     className={`w-full p-2 rounded-lg border resize-none ${
                       isDark
-                        ? "bg-gray-700 border-gray-600 text-white"
+                        ? "bg-gray-700/50 backdrop-blur-sm border-gray-600 text-white"
                         : "bg-gray-50 border-gray-300"
                     }`}
                     rows={2}
@@ -716,11 +717,11 @@ const isUserAdmin = (userId) => {
                 <div className="grid grid-cols-2 gap-4">
                   <div
                     className={`p-3 rounded-lg ${
-                      isDark ? "bg-gray-700" : "bg-gray-50"
+                      isDark ? "bg-gray-700/50 backdrop-blur-sm" : "bg-gray-50"
                     }`}
                   >
                     <div className="flex items-center space-x-2 mb-1">
-                      <Calendar className="w-4 h-4 text-gray-500" />
+                      <Calendar className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                       <span className="text-sm font-medium">Created</span>
                     </div>
                     <p className="text-sm text-gray-600 dark:text-gray-300">
@@ -730,11 +731,11 @@ const isUserAdmin = (userId) => {
 
                   <div
                     className={`p-3 rounded-lg ${
-                      isDark ? "bg-gray-700" : "bg-gray-50"
+                      isDark ? "bg-gray-700/50 backdrop-blur-sm" : "bg-gray-50"
                     }`}
                   >
                     <div className="flex items-center space-x-2 mb-1">
-                      <User2 className="w-4 h-4 text-gray-500" />
+                      <User2 className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                       <span className="text-sm font-medium">Type</span>
                     </div>
                     <p className="text-sm text-gray-600 dark:text-gray-300">
@@ -757,7 +758,7 @@ const isUserAdmin = (userId) => {
                   return (
                     <div
                       key={participant.user._id}
-                      className={`flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors`}
+                      className={`flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/30 backdrop-blur-sm transition-colors`}
                     >
                       <div
                         className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold relative"
@@ -806,7 +807,7 @@ const isUserAdmin = (userId) => {
                               className={`p-2 rounded-lg transition-colors ${
                                 isAdminUser
                                   ? "text-yellow-500 hover:bg-yellow-100 dark:hover:bg-yellow-900"
-                                  : "text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                  : "text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700/30 backdrop-blur-sm"
                               }`}
                               title={
                                 isAdminUser
@@ -844,7 +845,7 @@ const isUserAdmin = (userId) => {
                     {!showAddParticipant ? (
                       <button
                         onClick={() => setShowAddParticipant(true)}
-                        className="w-full p-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-500 dark:hover:border-blue-400 transition-colors flex items-center justify-center space-x-2 text-gray-500 hover:text-blue-500"
+                        className="w-full p-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-500 dark:hover:border-blue-400 transition-colors flex items-center justify-center space-x-2 text-gray-500 dark:text-gray-400 hover:text-blue-500"
                       >
                         <UserPlus className="w-4 h-4" />
                         <span>Add {isBroadcast ? "Subscriber" : "Member"}</span>
@@ -853,7 +854,7 @@ const isUserAdmin = (userId) => {
                       <div className="space-y-3">
                         <div className="flex items-center space-x-2">
                           <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
                             <input
                               type="email"
                               placeholder="Search by email..."
@@ -861,7 +862,7 @@ const isUserAdmin = (userId) => {
                               onChange={(e) => setSearchQuery(e.target.value)}
                               className={`w-full pl-10 pr-4 py-2 rounded-lg border ${
                                 isDark
-                                  ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                                  ? "bg-gray-700/50 backdrop-blur-sm border-gray-600 text-white placeholder-gray-400"
                                   : "bg-gray-50 border-gray-300"
                               }`}
                             />
@@ -877,7 +878,7 @@ const isUserAdmin = (userId) => {
                               setSearchQuery("");
                               setSearchResults([]);
                             }}
-                            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/30 backdrop-blur-sm transition-colors"
                           >
                             <X className="w-4 h-4" />
                           </button>
@@ -890,7 +891,7 @@ const isUserAdmin = (userId) => {
                               <div
                                 key={user._id}
                                 onClick={() => handleAddParticipantClick(user)}
-                                className={`flex items-center space-x-3 p-2 rounded-lg cursor-pointer transition-all hover:bg-gray-100 dark:hover:bg-gray-600`}
+                                className={`flex items-center space-x-3 p-2 rounded-lg cursor-pointer transition-all hover:bg-gray-100 dark:hover:bg-gray-700/40`}
                               >
                                 <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-sm font-semibold">
                                   {user.avatar ||
@@ -901,7 +902,7 @@ const isUserAdmin = (userId) => {
                                   <p className="font-medium text-sm truncate">
                                     {user.name}
                                   </p>
-                                  <p className="text-xs text-gray-500 truncate">
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                                     {user.email}
                                   </p>
                                 </div>
@@ -1099,13 +1100,13 @@ const isUserAdmin = (userId) => {
                       onClick={handleClearChat}
                       className="w-full flex items-center space-x-2 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Eraser className="w-4 h-4" />
                       <span>Clear Chat</span>
                     </button>
                     
                     <button
                       onClick={handleHideChat}
-                      className="w-full flex items-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                      className="w-full flex items-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700/40 backdrop-blur-sm transition-colors"
                     >
                       <UserMinus className="w-4 h-4" />
                       <span>Hide Chat</span>

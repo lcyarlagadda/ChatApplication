@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { MessageSquare, Plus, X, Radio } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { MessageSquare, Plus, X, Radio, Menu } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import Sidebar from './Sidebar';
 import ChatArea from './ChatArea';
@@ -55,6 +55,49 @@ const ChatLayout = ({
   const [showConversationModal, setShowConversationModal] = useState(false);
   const [conversationMode, setConversationMode] = useState('select'); // 'select', 'direct', 'group', 'broadcast'
   const [notification, setNotification] = useState(null);
+  
+  // Mobile responsive state
+  const [isMobile, setIsMobile] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [showChat, setShowChat] = useState(false);
+
+  // Check if screen is mobile size
+  useEffect(() => {
+    const checkIsMobile = () => {
+      const mobile = window.innerWidth < 768; // md breakpoint
+      setIsMobile(mobile);
+      
+      if (mobile) {
+        // On mobile, show sidebar by default, hide chat
+        setShowSidebar(true);
+        setShowChat(false);
+      } else {
+        // On desktop, show both
+        setShowSidebar(true);
+        setShowChat(true);
+      }
+    };
+
+    checkIsMobile();
+    window.addEventListener('resize', checkIsMobile);
+    return () => window.removeEventListener('resize', checkIsMobile);
+  }, []);
+
+  // Handle conversation selection on mobile
+  const handleMobileConversationSelect = (conversation) => {
+    if (isMobile) {
+      setShowSidebar(false);
+      setShowChat(true);
+    }
+  };
+
+  // Handle back to sidebar on mobile
+  const handleBackToSidebar = () => {
+    if (isMobile) {
+      setShowSidebar(true);
+      setShowChat(false);
+    }
+  };
 
   const handleImageClick = (imageUrl) => {
     setSelectedImage(imageUrl);
@@ -239,7 +282,7 @@ const ChatLayout = ({
   };
 
   return (
-    <div className={`h-screen flex ${isDark ? 'bg-gray-900 text-white' : 'bg-gray-50'}`}>
+    <div className={`h-screen ${isMobile ? 'flex flex-col' : 'flex'} ${isDark ? 'bg-gray-900 text-white' : 'bg-gray-50'}`}>
       {notification && (
         <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg transition-all ${
           notification.type === 'success' 
@@ -258,15 +301,38 @@ const ChatLayout = ({
         </div>
       )}
       
+      {/* Mobile Header with Back Button */}
+      {isMobile && showChat && (
+        <div className={`fixed top-0 left-0 right-0 z-40 h-12 flex items-center px-4 border-b ${
+          isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+        }`}>
+          <button
+            onClick={handleBackToSidebar}
+            className={`p-2 rounded-lg transition-colors ${
+              isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <span className="ml-3 font-semibold">
+            {activeChat?.name || 'Chat'}
+          </span>
+        </div>
+      )}
+      
       {/* Sidebar */}
-      <Sidebar
-        onStartConversation={handleStartConversation}
-        onProfileClick={handleProfileClick}
-        messages={messages}
-        onDeleteConversation={onDeleteConversation}
-      />
+      <div className={`${isMobile ? (showSidebar ? 'block' : 'hidden') : 'block'} ${isMobile ? 'w-full h-full flex-1' : ''}`}>
+        <Sidebar
+          onStartConversation={handleStartConversation}
+          onProfileClick={handleProfileClick}
+          messages={messages}
+          onDeleteConversation={onDeleteConversation}
+          onConversationSelect={handleMobileConversationSelect}
+        />
+      </div>
 
-      <div className="flex-1 flex flex-col">
+      {/* Chat Area */}
+      <div className={`${isMobile ? (showChat ? 'block' : 'hidden') : 'block'} ${isMobile ? 'w-full h-full' : 'flex-1'} flex flex-col ${isMobile ? 'pt-12' : ''}`}>
         {activeChat ? (
           <ChatArea
             isDark={isDark}

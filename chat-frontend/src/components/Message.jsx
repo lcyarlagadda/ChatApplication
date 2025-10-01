@@ -24,27 +24,6 @@ const SystemMessage = ({ message, isDark }) => {
     }
   };
 
-  const getSystemMessageIcon = (content) => {
-    if (content.includes('created the group') || content.includes('created the broadcast')) {
-      return '🎉';
-    } else if (content.includes('added') && content.includes('to the')) {
-      return '👋';
-    } else if (content.includes('left') || content.includes('removed')) {
-      return '👋';
-    } else if (content.includes('promoted') && content.includes('administrator')) {
-      return '👑';
-    } else if (content.includes('removed') && content.includes('administrator')) {
-      return '👑';
-    } else if (content.includes('changed') && content.includes('name')) {
-      return '✏️';
-    } else if (content.includes('updated') && content.includes('description')) {
-      return '📝';
-    } else if (content.includes('changed') && content.includes('avatar')) {
-      return '🖼️';
-    }
-    return '📢'; // Default system message icon
-  };
-
   return (
     <div className="flex justify-center my-4">
       <div 
@@ -56,19 +35,8 @@ const SystemMessage = ({ message, isDark }) => {
           }
         `}
       >
-        <span className="text-base">
-          {getSystemMessageIcon(message.content)}
-        </span>
         <span className="font-medium text-center flex-1">
           {message.content}
-        </span>
-        <span 
-          className={`text-xs ${
-            isDark ? 'text-gray-400' : 'text-gray-500'
-          }`}
-          title={new Date(message.createdAt).toLocaleString()}
-        >
-          {formatTime(message.createdAt)}
         </span>
       </div>
     </div>

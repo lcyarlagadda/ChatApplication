@@ -19,7 +19,7 @@ const EmojiPicker = ({ isDark, onEmojiSelect, onClose }) => {
   return (
     <div 
       ref={emojiPickerRef}
-      className={`absolute bottom-12 left-0 w-80 h-80 ${isDark ? 'bg-gray-700' : 'bg-white'} rounded-lg shadow-xl border z-50`}
+      className={`absolute bottom-12 left-0 w-72 sm:w-80 h-72 sm:h-80 max-w-[calc(100vw-2rem)] ${isDark ? 'bg-gray-700' : 'bg-white'} rounded-lg shadow-xl border z-50`}
     >
       <div className="p-4 h-full flex flex-col">
         <h3 className="font-semibold mb-3">Emojis</h3>

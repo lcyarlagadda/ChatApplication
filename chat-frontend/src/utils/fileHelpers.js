@@ -200,31 +200,6 @@ export const getSidebarPreviewText = (message) => {
   return `${icon} ${fileName}`;
 };
 
-// Additional helper function to format system messages for better display
-export const formatSystemMessage = (content) => {
-  if (!content) return 'System message';
-  
-  // Add appropriate emoji/icon for different system message types
-  if (content.includes('created the group') || content.includes('created the broadcast')) {
-    return `🎉 ${content}`;
-  } else if (content.includes('added') && content.includes('to the')) {
-    return `👋 ${content}`;
-  } else if (content.includes('left') || content.includes('removed')) {
-    return `👋 ${content}`;
-  } else if (content.includes('promoted') && content.includes('administrator')) {
-    return `👑 ${content}`;
-  } else if (content.includes('removed') && content.includes('administrator')) {
-    return `👑 ${content}`;
-  } else if (content.includes('changed') && content.includes('name')) {
-    return `✏️ ${content}`;
-  } else if (content.includes('updated') && content.includes('description')) {
-    return `📝 ${content}`;
-  } else if (content.includes('changed') && content.includes('avatar')) {
-    return `🖼️ ${content}`;
-  }
-  
-  return content;
-};
 
 // Enhanced function to determine if a message should show sender info
 export const shouldShowMessageSender = (message, conversationType) => {

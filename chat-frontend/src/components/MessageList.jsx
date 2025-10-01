@@ -493,10 +493,6 @@ const loadMoreMessages = async () => {
           title="Scroll to bottom"
         >
           <ChevronUp className="w-5 h-5 transform rotate-180" />
-          {/* Unread indicator on scroll button */}
-          {messages.length > 0 && (
-            <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
-          )}
         </button>
       )}
     </div>

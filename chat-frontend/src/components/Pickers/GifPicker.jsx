@@ -78,7 +78,7 @@ const GifPicker = ({ isDark, onGifSelect, onClose }) => {
   };
 
   return (
-    <div className={`absolute bottom-12 right-0 w-80 h-96 rounded-lg shadow-lg border z-20 ${
+    <div className={`fixed bottom-24 left-1/2 transform -translate-x-1/2 w-72 sm:w-80 h-80 sm:h-96 max-w-[calc(100vw-2rem)] rounded-lg shadow-lg border z-20 ${
       isDark ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
     }`}>
       {/* Header */}
@@ -111,7 +111,7 @@ const GifPicker = ({ isDark, onGifSelect, onClose }) => {
       </div>
 
       {/* Content */}
-      <div className="p-2 h-80 overflow-y-auto">
+      <div className="p-2 h-64 sm:h-80 overflow-y-auto">
         {/* Trending/Search Header */}
         <div className="flex items-center space-x-2 mb-2 px-1">
           <Zap className="w-4 h-4 text-yellow-500" />
