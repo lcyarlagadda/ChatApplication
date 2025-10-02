@@ -41,7 +41,6 @@ router.get('/:conversationId', auth, async (req, res) => {
     }
 
     // Get messages with pagination (newest first), excluding cleared messages for this user
-    console.log(`📥 FETCH MESSAGES: Fetching messages for user ${req.user.id} in conversation ${conversationId}`);
     const messages = await Message.find({ 
       conversation: conversationId,
       clearedFor: { $ne: req.user.id }
@@ -65,7 +64,6 @@ router.get('/:conversationId', auth, async (req, res) => {
     // Reverse to show oldest first in the response
     messages.reverse();
     
-    console.log(`📥 FETCH MESSAGES: Returning ${messages.length} messages for user ${req.user.id} in conversation ${conversationId}`);
 
     res.json({
       success: true,
@@ -568,7 +566,6 @@ router.post('/:conversationId', auth, [
       );
 
       // Make hidden conversations reappear for all participants when new message arrives
-      console.log(`🔄 HTTP: Calling makeHiddenConversationReappear for conversation ${conversationId}, sender: ${req.user.id}`);
       await req.socketService.makeHiddenConversationReappear(conversationId, req.user.id);
 
       // Process delivery status for online users
@@ -730,7 +727,6 @@ router.delete('/:messageId', auth, async (req, res) => {
         await cloudinary.uploader.destroy(publicId, {
           resource_type: resourceType
         });
-        console.log(`Cloudinary file deleted: ${publicId}`);
       } catch (cloudErr) {
         console.warn(`Cloudinary deletion failed for ${publicId}`, cloudErr);
       }
@@ -740,7 +736,6 @@ router.delete('/:messageId', auth, async (req, res) => {
 
     const conversation = message.conversation;
     const lastMessageId = conversation.lastMessage?._id?.toString();
-    console.log("Comparing ids", lastMessageId, message._id.toString());
 
     let newLastMessageData = null;
 
@@ -752,7 +747,6 @@ router.delete('/:messageId', auth, async (req, res) => {
       .populate('sender', 'name') // Populate sender for socket event
       .sort({ createdAt: -1 });
 
-      console.log(newLast);
 
       if (newLast) {
         // Prepare the last message data
@@ -1082,7 +1076,6 @@ router.post('/bulk-seen', auth, async (req, res) => {
       }
     );
 
-    console.log(`👁️ Bulk read: ${updateResult.modifiedCount} messages in ${conversationId} by ${req.user.name}`);
 
     // Emit Socket.IO event
     if (req.socketService) {

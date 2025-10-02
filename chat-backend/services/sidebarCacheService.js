@@ -9,9 +9,6 @@ class SidebarCacheService {
   }
 
   async initializeRedis() {
-    console.log('🔄 Initializing Redis sidebar cache...');
-    console.log('REDIS_URL exists:', !!process.env.REDIS_URL);
-    console.log('REDIS_URL value:', process.env.REDIS_URL ? 'SET' : 'NOT SET');
     
     if (process.env.REDIS_URL && process.env.REDIS_URL !== 'disabled') {
       try {
@@ -39,28 +36,22 @@ class SidebarCacheService {
         });
 
         await this.redisClient.connect();
-        console.log('🎉 Redis sidebar cache initialization completed');
       } catch (error) {
         console.warn('⚠️ Redis sidebar cache initialization failed:', error.message);
         this.isConnected = false;
       }
-    } else {
-      console.log('⚠️ Redis URL not provided, skipping cache initialization');
     }
   }
 
   // Cache user's sidebar data (conversations with last messages and unread counts)
   async cacheUserSidebar(userId, sidebarData, ttl = 300) { // 5 minutes
-    console.log(`🔄 Attempting to cache sidebar for user ${userId}, Redis connected: ${this.isConnected}`);
     if (!this.isConnected) {
-      console.log(`❌ Cannot cache sidebar for user ${userId} - Redis not connected`);
       return false;
     }
     
     try {
       const key = `sidebar:${userId}`;
       await this.redisClient.setEx(key, ttl, JSON.stringify(sidebarData));
-      console.log(`📦 Cached sidebar for user ${userId} (${sidebarData.length} conversations)`);
       return true;
     } catch (error) {
       console.warn('Sidebar cache set error:', error.message);
@@ -70,9 +61,7 @@ class SidebarCacheService {
 
   // Get user's cached sidebar data
   async getUserSidebar(userId) {
-    console.log(`🔄 Checking cache for user ${userId}, Redis connected: ${this.isConnected}`);
     if (!this.isConnected) {
-      console.log(`❌ Cannot get sidebar cache for user ${userId} - Redis not connected`);
       return null;
     }
     
@@ -81,10 +70,8 @@ class SidebarCacheService {
       const cached = await this.redisClient.get(key);
       if (cached) {
         const data = JSON.parse(cached);
-        console.log(`✅ Sidebar cache HIT for user ${userId} (${data.length} conversations)`);
         return data;
       }
-      console.log(`❌ Sidebar cache MISS for user ${userId}`);
       return null;
     } catch (error) {
       console.warn('Sidebar cache get error:', error.message);
@@ -127,7 +114,6 @@ class SidebarCacheService {
     try {
       const key = `unread:${userId}:${conversationId}`;
       await this.redisClient.setEx(key, ttl, count.toString());
-      console.log(`📦 Cached unread count for user ${userId}, conversation ${conversationId}: ${count}`);
       return true;
     } catch (error) {
       console.warn('Unread count cache error:', error.message);
@@ -143,7 +129,6 @@ class SidebarCacheService {
       const key = `unread:${userId}:${conversationId}`;
       const cached = await this.redisClient.get(key);
       const count = cached ? parseInt(cached) : 0;
-      console.log(`📊 Retrieved unread count for user ${userId}, conversation ${conversationId}: ${count}`);
       return count;
     } catch (error) {
       console.warn('Get unread count cache error:', error.message);
@@ -161,7 +146,6 @@ class SidebarCacheService {
       const newCount = currentCount ? parseInt(currentCount) + increment : increment;
       
       await this.redisClient.setEx(key, ttl, newCount.toString());
-      console.log(`➕ Incremented unread count for user ${userId}, conversation ${conversationId}: ${currentCount || 0} → ${newCount}`);
       return newCount;
     } catch (error) {
       console.warn('Increment unread count error:', error.message);
@@ -176,7 +160,6 @@ class SidebarCacheService {
     try {
       const key = `unread:${userId}:${conversationId}`;
       await this.redisClient.setEx(key, ttl, '0');
-      console.log(`🔄 Reset unread count for user ${userId}, conversation ${conversationId}: → 0`);
       return true;
     } catch (error) {
       console.warn('Reset unread count error:', error.message);
@@ -193,7 +176,6 @@ class SidebarCacheService {
       const keys = await this.redisClient.keys(pattern);
       
       if (keys.length === 0) {
-        console.log(`📊 No unread counts found for user ${userId}`);
         return {};
       }
       
@@ -204,7 +186,6 @@ class SidebarCacheService {
         unreadCounts[conversationId] = count ? parseInt(count) : 0;
       }
       
-      console.log(`📊 Retrieved all unread counts for user ${userId}:`, unreadCounts);
       return unreadCounts;
     } catch (error) {
       console.warn('Get all unread counts error:', error.message);
@@ -220,7 +201,6 @@ class SidebarCacheService {
     
     try {
       await this.redisClient.del(`sidebar:${userId}`);
-      console.log(`🗑️ Invalidated sidebar cache for user ${userId}`);
       return true;
     } catch (error) {
       console.warn('Sidebar invalidation error:', error.message);
@@ -244,7 +224,6 @@ class SidebarCacheService {
       }
       
       await Promise.all(promises);
-      console.log(`🗑️ Invalidated conversation cache for ${conversationId}`);
       return true;
     } catch (error) {
       console.warn('Conversation invalidation error:', error.message);
@@ -259,7 +238,6 @@ class SidebarCacheService {
     try {
       await this.redisClient.del(`unread:${userId}:${conversationId}`);
       await this.redisClient.del(`sidebar:${userId}`);
-      console.log(`🗑️ Invalidated read cache for user ${userId}, conversation ${conversationId}`);
       return true;
     } catch (error) {
       console.warn('Read invalidation error:', error.message);
@@ -309,7 +287,6 @@ class SidebarCacheService {
       };
       
       await this.redisClient.setEx(key, ttl, JSON.stringify(onlineData));
-      console.log(`🟢 User ${userId} marked as online`);
       return true;
     } catch (error) {
       console.warn('Add online user error:', error.message);
@@ -324,7 +301,6 @@ class SidebarCacheService {
     try {
       const key = `online:${userId}`;
       await this.redisClient.del(key);
-      console.log(`🔴 User ${userId} marked as offline`);
       return true;
     } catch (error) {
       console.warn('Remove online user error:', error.message);
@@ -380,7 +356,6 @@ class SidebarCacheService {
         }
       }
       
-      console.log(`👥 Retrieved ${onlineUsers.length} online users`);
       return onlineUsers;
     } catch (error) {
       console.warn('Get all online users error:', error.message);
@@ -416,7 +391,6 @@ class SidebarCacheService {
         parsedData.lastActivity = new Date().toISOString();
         
         await this.redisClient.setEx(key, ttl, JSON.stringify(parsedData));
-        console.log(`🔄 Updated activity for user ${userId}`);
         return true;
       }
       
@@ -458,9 +432,6 @@ class SidebarCacheService {
         }
       }
       
-      if (cleanedCount > 0) {
-        console.log(`🧹 Cleaned up ${cleanedCount} expired online users`);
-      }
       
       return cleanedCount;
     } catch (error) {
@@ -497,8 +468,6 @@ class SidebarCacheService {
     this.cleanupInterval = setInterval(async () => {
       await this.cleanupExpiredOnlineUsers();
     }, intervalMs);
-    
-    console.log(`🧹 Started online users cleanup job (every ${intervalMs}ms)`);
   }
 
   // Stop cleanup job
@@ -506,7 +475,6 @@ class SidebarCacheService {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
-      console.log('🧹 Stopped online users cleanup job');
     }
   }
 

@@ -1,5 +1,3 @@
-2. deletion
 3. number of notifs
 4. blue ticks in groups
-6. dark mode
 9.

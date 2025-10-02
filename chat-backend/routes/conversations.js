@@ -170,7 +170,6 @@ router.get('/', auth, async (req, res) => {
     
     // Check cache first
     const cachedSidebar = await sidebarCache.getUserSidebar(userId);
-    console.log(`🔍 Cached sidebar data type:`, typeof cachedSidebar, Array.isArray(cachedSidebar));
     if (cachedSidebar && Array.isArray(cachedSidebar)) {
       // Validate cached data structure before returning
       const validatedCachedData = cachedSidebar.map(conv => {
@@ -204,7 +203,6 @@ router.get('/', auth, async (req, res) => {
     }
 
     // Cache miss - fetch from database
-    console.log(`🔄 Fetching sidebar data from DB for user ${userId}`);
     
     // Clear any potentially corrupted cache data
     await sidebarCache.invalidateUserSidebar(userId);
@@ -213,11 +211,9 @@ router.get('/', auth, async (req, res) => {
     
     // Get cached unread counts for all conversations
     const cachedUnreadCounts = await sidebarCache.getAllUnreadCounts(userId);
-    console.log(`📊 Using cached unread counts:`, cachedUnreadCounts);
     
     // Get online user IDs for status display
     const onlineUserIds = await sidebarCache.getOnlineUserIds();
-    console.log(`👥 Online users:`, onlineUserIds);
     
     const conversations = await Conversation.find({
       'participants.user': userId
@@ -248,16 +244,13 @@ router.get('/', auth, async (req, res) => {
       if (currentUserParticipant && currentUserParticipant.isHidden) {
         // Check if user left the conversation (has leftAt timestamp)
         if (currentUserParticipant.leftAt) {
-          console.log(`CONVERSATION FILTER: User ${userId} - Conversation ${convObj._id} is left (leftAt: ${currentUserParticipant.leftAt}), keeping visible`);
           // Keep the conversation but mark it as left
           convObj.userLeft = true;
           convObj.leftAt = currentUserParticipant.leftAt;
         } else {
-          console.log(`CONVERSATION FILTER: User ${userId} - Conversation ${convObj._id} is hidden (isHidden: ${currentUserParticipant.isHidden}, hiddenAt: ${currentUserParticipant.hiddenAt}), filtering out`);
           return null; // Skip this conversation for the current user (regular hidden conversation)
         }
       } else if (currentUserParticipant) {
-        console.log(`CONVERSATION FILTER: User ${userId} - Conversation ${convObj._id} is visible (isHidden: ${currentUserParticipant.isHidden}, hiddenAt: ${currentUserParticipant.hiddenAt})`);
       }
       
       if (convObj.type === 'direct') {
@@ -297,13 +290,11 @@ router.get('/', auth, async (req, res) => {
       const cachedUnreadCount = cachedUnreadCounts[convObj._id.toString()];
       if (cachedUnreadCount !== undefined) {
         convObj.unreadCount = cachedUnreadCount;
-        console.log(`📊 Using cached unread count for conversation ${convObj._id}: ${cachedUnreadCount}`);
       } else {
         // Fallback to database calculation and cache the result
         const dbUnreadCount = await conv.getUnreadCount(userId);
         convObj.unreadCount = dbUnreadCount;
         await sidebarCache.cacheUnreadCount(userId, convObj._id.toString(), dbUnreadCount);
-        console.log(`📊 Calculated and cached unread count for conversation ${convObj._id}: ${dbUnreadCount}`);
       }
       
       // Add online status to participants
@@ -996,18 +987,6 @@ router.put('/:id', async (req, res) => {
 
 // Helper function to clear chat for a user
 const clearChatForUser = async (conversationId, userId) => {
-  console.log(`🧹 CLEAR CHAT: Clearing messages for user ${userId} in conversation ${conversationId}`);
-  
-  // First, let's see how many messages exist in this conversation
-  const totalMessages = await Message.countDocuments({ conversation: conversationId });
-  console.log(`🧹 CLEAR CHAT: Total messages in conversation: ${totalMessages}`);
-  
-  // Check how many are already cleared for this user
-  const alreadyCleared = await Message.countDocuments({ 
-    conversation: conversationId,
-    clearedFor: userId 
-  });
-  console.log(`🧹 CLEAR CHAT: Messages already cleared for user ${userId}: ${alreadyCleared}`);
   
   // Add user to clearedFor array in all messages instead of deleting them
   const result = await Message.updateMany(
@@ -1019,9 +998,6 @@ const clearChatForUser = async (conversationId, userId) => {
       $addToSet: { clearedFor: userId }
     }
   );
-  
-  console.log(`🧹 CLEAR CHAT: Updated ${result.modifiedCount} messages for user ${userId}`);
-  console.log(`🧹 CLEAR CHAT: Matched ${result.matchedCount} messages, acknowledged: ${result.acknowledged}`);
 
   // Update the participant's lastRead timestamp
   const conversation = await Conversation.findById(conversationId);
@@ -1032,7 +1008,6 @@ const clearChatForUser = async (conversationId, userId) => {
   if (participant) {
     participant.lastRead = new Date();
     await conversation.save();
-    console.log(`🧹 CLEAR CHAT: Updated lastRead timestamp for user ${userId}`);
   }
 };
 
@@ -1063,7 +1038,6 @@ router.post('/:conversationId/delete', auth, async (req, res) => {
       });
     }
 
-    console.log(`🗑️ DELETE CHAT: User ID type: ${typeof userId}, value: ${userId}`);
     await clearChatForUser(conversationId, userId);
 
     // Step 2: Hide the conversation for this user
