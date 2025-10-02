@@ -16,8 +16,10 @@ const socketService = require('./services/socketService');
 const app = express();
 const server = http.createServer(app);
 
-// Initialize Socket.IO
-socketService.initialize(server);
+// Initialize Socket.IO (async)
+socketService.initialize(server).catch(error => {
+  console.error('Failed to initialize Socket.IO:', error);
+});
 
 // Import routes
 const conversationRoutes = require('./routes/conversations');

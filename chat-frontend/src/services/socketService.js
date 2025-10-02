@@ -7,9 +7,20 @@ class SocketService {
     this.isConnected = false;
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
+    this.heartbeatInterval = null;
+    this.lastHeartbeat = null;
+    this.heartbeatTimeout = null;
+    this.currentToken = null;
+    this.connectionHealth = 'unknown'; // 'healthy', 'unhealthy', 'unknown'
+    this.isMonitoring = false;
+    this.rejoinRooms = new Set(); // Track rooms to rejoin on reconnect
+    this.currentUserId = null; // Track current user ID
   }
 
-  connect(token) {
+  async connect(token, userId = null) {
+    this.currentToken = token;
+    this.currentUserId = userId;
+    
     if (this.socket?.connected) {
       return this.socket;
     }
@@ -25,10 +36,39 @@ class SocketService {
       reconnectionDelay: 1000,
       reconnectionAttempts: this.maxReconnectAttempts,
       timeout: 20000,
+      forceNew: true, // Force new connection
+      // Optimized ping settings for better stability
+      pingInterval: 25000, // Send ping every 25 seconds (default is 25s)
+      pingTimeout: 60000, // Wait 60 seconds for pong (default is 20s)
+      pingTimeoutRetries: 3, // Retry ping timeout 3 times before disconnecting
     });
 
     this.setupEventListeners();
+    this.startHealthMonitoring();
     return this.socket;
+  }
+
+  // Refresh JWT token and reconnect
+  async refreshTokenAndReconnect() {
+    try {
+      console.log('Refreshing JWT token and reconnecting...');
+      
+      // Import sessionManager dynamically to avoid circular dependencies
+      const sessionManager = (await import('../utils/sessionManager')).default;
+      const newToken = await sessionManager.refreshAccessToken();
+      
+      if (newToken) {
+        console.log('Token refreshed successfully, reconnecting...');
+        await this.connect(newToken, this.currentUserId);
+        return true;
+      } else {
+        console.error('Failed to refresh token');
+        return false;
+      }
+    } catch (error) {
+      console.error('Error refreshing token:', error);
+      return false;
+    }
   }
 
   setupEventListeners() {
@@ -38,41 +78,174 @@ class SocketService {
       console.log('Socket connected:', this.socket.id);
       this.isConnected = true;
       this.reconnectAttempts = 0;
+      this.connectionHealth = 'healthy';
+      this.lastHeartbeat = Date.now();
+      
+      // Rejoin user room and tracked conversations on reconnect
+      this.rejoinRoomsOnConnect();
     });
 
     this.socket.on('disconnect', (reason) => {
       console.log('Socket disconnected:', reason);
       this.isConnected = false;
+      this.connectionHealth = 'unhealthy';
+      this.stopHealthMonitoring();
     });
 
     this.socket.on('connect_error', (error) => {
       console.error('Socket connection error:', error);
       this.reconnectAttempts++;
+      this.connectionHealth = 'unhealthy';
       
       if (this.reconnectAttempts >= this.maxReconnectAttempts) {
         console.error('Max reconnection attempts reached');
+        this.connectionHealth = 'unhealthy';
       }
     });
 
     this.socket.on('error', (error) => {
       console.error('Socket error:', error);
+      this.connectionHealth = 'unhealthy';
+    });
+
+    // Handle heartbeat response from server
+    this.socket.on('pong', () => {
+      console.log('Socket heartbeat received');
+      this.lastHeartbeat = Date.now();
+      this.connectionHealth = 'healthy';
+      if (this.heartbeatTimeout) {
+        clearTimeout(this.heartbeatTimeout);
+        this.heartbeatTimeout = null;
+      }
+    });
+
+    // Handle server-initiated refresh
+    this.socket.on('socket_refresh_required', () => {
+      console.log('Server requested socket refresh');
+      this.refreshConnection();
+    });
+
+    // Handle authentication errors (token expired)
+    this.socket.on('connect_error', async (error) => {
+      console.error('Socket connection error:', error);
+      this.reconnectAttempts++;
+      this.connectionHealth = 'unhealthy';
+      
+      // If it's an authentication error, try to refresh token
+      if (error.message && error.message.includes('Authentication')) {
+        console.log('Authentication error detected, attempting token refresh...');
+        const refreshSuccess = await this.refreshTokenAndReconnect();
+        if (refreshSuccess) {
+          return; // Successfully refreshed, don't increment attempts
+        }
+      }
+      
+      if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+        console.error('Max reconnection attempts reached');
+        this.connectionHealth = 'unhealthy';
+      }
     });
   }
 
   disconnect() {
+    this.stopHealthMonitoring();
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
       this.isConnected = false;
       this.reconnectAttempts = 0;
+      this.connectionHealth = 'unknown';
+      this.currentToken = null;
       console.log("Disconnecting socket");
     }
+  }
+
+  // Start health monitoring with optimized heartbeat
+  startHealthMonitoring() {
+    if (this.isMonitoring) return; // Prevent duplicate monitoring
+    
+    this.isMonitoring = true;
+    this.stopHealthMonitoring(); // Clear any existing monitoring
+    
+    // Heartbeat every 2 minutes (much less frequent)
+    this.heartbeatInterval = setInterval(() => {
+      // Only send heartbeat if user is likely active (page visible, recent activity)
+      if (document.visibilityState === 'visible' && this.isUserActive()) {
+        this.sendHeartbeat();
+      }
+    }, 120000); // 2 minutes
+  }
+
+  // Check if user is active (simple heuristic)
+  isUserActive() {
+    // Check if page is visible and has been interacted with recently
+    const lastActivity = window.lastUserInteraction || 0;
+    const timeSinceActivity = Date.now() - lastActivity;
+    return document.visibilityState === 'visible' && timeSinceActivity < 300000; // 5 minutes
+  }
+
+  // Stop health monitoring
+  stopHealthMonitoring() {
+    this.isMonitoring = false;
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+    if (this.heartbeatTimeout) {
+      clearTimeout(this.heartbeatTimeout);
+      this.heartbeatTimeout = null;
+    }
+  }
+
+  // Send heartbeat to server
+  sendHeartbeat() {
+    if (!this.socket || !this.isConnected) return;
+
+    console.log('Sending socket heartbeat');
+    this.socket.emit('ping');
+
+    // Set timeout for heartbeat response (30 seconds - more lenient)
+    this.heartbeatTimeout = setTimeout(() => {
+      console.warn('Socket heartbeat timeout - connection may be stale');
+      this.connectionHealth = 'unhealthy';
+      // Only refresh if user is actually active
+      if (this.isUserActive()) {
+        this.refreshConnection();
+      }
+    }, 30000);
+  }
+
+  // Refresh the socket connection
+  refreshConnection() {
+    console.log('Refreshing socket connection...');
+    
+    if (this.socket) {
+      this.socket.disconnect();
+    }
+    
+    // Wait a moment before reconnecting
+    setTimeout(() => {
+      if (this.currentToken) {
+        this.connect(this.currentToken);
+      }
+    }, 1000);
+  }
+
+  // Get connection health status
+  getConnectionHealth() {
+    return {
+      isConnected: this.isConnected,
+      health: this.connectionHealth,
+      lastHeartbeat: this.lastHeartbeat,
+      reconnectAttempts: this.reconnectAttempts
+    };
   }
 
   // Join user to their personal room for notifications
   joinUserRoom(userId) {
     if (this.socket && userId) {
       this.socket.emit('join_user_room', userId);
+      this.rejoinRooms.add(`user_${userId}`);
     }
   }
 
@@ -80,6 +253,7 @@ class SocketService {
   joinConversation(conversationId) {
     if (this.socket && conversationId) {
       this.socket.emit('join_conversation', conversationId);
+      this.rejoinRooms.add(`conversation_${conversationId}`);
       console.log("Joining convo", conversationId);
     }
   }
@@ -88,7 +262,28 @@ class SocketService {
   leaveConversation(conversationId) {
     if (this.socket && conversationId) {
       this.socket.emit('leave_conversation', conversationId);
+      this.rejoinRooms.delete(`conversation_${conversationId}`);
       console.log("Leaving room", conversationId);
+    }
+  }
+
+  // Rejoin all tracked rooms on reconnect
+  rejoinRoomsOnConnect() {
+    if (!this.socket || !this.isConnected) return;
+    
+    console.log('Rejoining rooms after reconnect:', Array.from(this.rejoinRooms));
+    
+    // Rejoin user room
+    if (this.currentUserId) {
+      this.joinUserRoom(this.currentUserId);
+    }
+    
+    // Rejoin all tracked conversation rooms
+    for (const room of this.rejoinRooms) {
+      if (room.startsWith('conversation_')) {
+        const conversationId = room.replace('conversation_', '');
+        this.joinConversation(conversationId);
+      }
     }
   }
 

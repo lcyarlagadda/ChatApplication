@@ -282,7 +282,7 @@ const ChatApp = () => {
   const connectSocket = () => {
     const session = sessionManager.getCurrentSession();
     if (session?.accessToken) {
-      socketService.connect(session.accessToken);
+      socketService.connect(session.accessToken, currentUser?._id);
 
       // Join user's personal room for notifications
       if (currentUser) {
@@ -295,6 +295,22 @@ const ChatApp = () => {
       });
     }
   };
+
+  // Monitor socket connection health (less frequent)
+  useEffect(() => {
+    const healthCheckInterval = setInterval(() => {
+      // Only check if user is active and page is visible
+      if (document.visibilityState === 'visible' && window.lastUserInteraction) {
+        const health = socketService.getConnectionHealth();
+        if (health.health === 'unhealthy') {
+          console.warn('Socket connection is unhealthy, attempting refresh...');
+          // The socket service will automatically handle reconnection
+        }
+      }
+    }, 300000); // Check every 5 minutes (much less frequent)
+
+    return () => clearInterval(healthCheckInterval);
+  }, []);
 
   const disconnectSocket = () => {
     socketService.disconnect();
@@ -1189,25 +1205,32 @@ const ChatApp = () => {
       }
 
       const conversationsData = await conversationsResponse.json();
+      console.log('Conversations response:', conversationsData);
 
-      if (conversationsData.success) {
+      if (conversationsData.success && conversationsData.data) {
         // Fetch unread counts for all conversations
-        const unreadCountsResponse = await sessionManager.authenticatedRequest(
-          "/conversations/unread-counts"
-        );
-        
         let unreadCounts = {};
-        if (unreadCountsResponse.ok) {
-          const unreadCountsData = await unreadCountsResponse.json();
-          if (unreadCountsData.success) {
-            unreadCounts = unreadCountsData.unreadCounts;
+        try {
+          const unreadCountsResponse = await sessionManager.authenticatedRequest(
+            "/conversations/unread-counts"
+          );
+          
+          if (unreadCountsResponse.ok) {
+            const unreadCountsData = await unreadCountsResponse.json();
+            console.log('Unread counts response:', unreadCountsData);
+            if (unreadCountsData.success) {
+              unreadCounts = unreadCountsData.data || {};
+            }
           }
+        } catch (error) {
+          console.warn('Failed to fetch unread counts:', error);
+          unreadCounts = {};
         }
         
-        const conversationsWithUnread = conversationsData.data.map(
+        const conversationsWithUnread = (conversationsData.data || []).map(
           (conversation) => ({
             ...conversation,
-            unreadCount: unreadCounts[conversation._id] || 0,
+            unreadCount: (unreadCounts && unreadCounts[conversation._id]) || 0,
           })
         );
 
@@ -1215,11 +1238,11 @@ const ChatApp = () => {
         const conversationsWithBlockedStatus = conversationsWithUnread.map(
           (conv) => ({
             ...conv,
-            participants: conv.participants.map((participant) => ({
+            participants: (conv.participants || []).map((participant) => ({
               ...participant,
               user: {
                 ...participant.user,
-                isBlockedByCurrentUser: currentUser.blockedUsers.includes(
+                isBlockedByCurrentUser: (currentUser.blockedUsers || []).includes(
                   participant.user._id
                 ),
                 hasBlockedCurrentUser:
@@ -1292,6 +1315,10 @@ const ChatApp = () => {
           "conversations"
         );
         setMessages(messagesData);
+      } else {
+        console.error('Failed to load conversations:', conversationsData);
+        updateConversations([]);
+        setMessages({});
       }
 
       // Fetch online users
@@ -1327,13 +1354,27 @@ const ChatApp = () => {
       const response = await sessionManager.authenticatedRequest("/conversations/unread-counts");
       if (response.ok) {
         const data = await response.json();
-        if (data.success) {
+        console.log('Refresh unread counts response:', data);
+        console.log('updateConversations function available:', !!updateConversations);
+        if (data.success && updateConversations) {
           // Update conversations with fresh unread counts
           updateConversations((prevConversations) => {
-            return prevConversations.map((conv) => ({
-              ...conv,
-              unreadCount: data.unreadCounts[conv._id] || 0
-            }));
+            if (!prevConversations || !Array.isArray(prevConversations)) {
+              console.warn('Invalid conversations data:', prevConversations);
+              return prevConversations || [];
+            }
+            
+            return prevConversations.map((conv) => {
+              if (!conv || !conv._id) {
+                console.warn('Invalid conversation data:', conv);
+                return conv;
+              }
+              
+              return {
+                ...conv,
+                unreadCount: (data.data && data.data[conv._id]) || 0
+              };
+            });
           });
         }
       }
@@ -1897,7 +1938,7 @@ const ChatApp = () => {
           setActiveChat(null);
         }
 
-        showNotification("Conversation removed from your chat list. It will reappear when someone sends a new message.", "success");
+        // Don't show notification for delete chat - it should be silent
       } else {
         throw new Error(result.message || "Failed to delete conversation");
       }

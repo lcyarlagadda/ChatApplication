@@ -8,17 +8,216 @@ const User = require('../models/User');
 const { authenticateToken } = require('../middleware/auth');
 const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
+const sidebarCache = require('../services/sidebarCacheService');
 
 // Apply authentication middleware to all routes
 router.use(authenticateToken);
 
-// Add this to your conversation routes to include blocked status
+// Cache management endpoint
+router.post('/cache/clear', auth, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    await sidebarCache.invalidateUserSidebar(userId);
+    
+    res.json({
+      success: true,
+      message: 'Cache cleared successfully'
+    });
+  } catch (error) {
+    console.error('Cache clear error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to clear cache'
+    });
+  }
+});
+
+// Clear all cache data (for debugging)
+router.post('/cache/clear-all', auth, async (req, res) => {
+  try {
+    // Clear sidebar cache
+    await sidebarCache.invalidateUserSidebar(req.user._id);
+    
+    // Clear unread counts
+    const unreadCounts = await sidebarCache.getAllUnreadCounts(req.user._id);
+    for (const [conversationId, count] of Object.entries(unreadCounts)) {
+      await sidebarCache.delete('unread', `${req.user._id}:${conversationId}`);
+    }
+    
+    res.json({
+      success: true,
+      message: 'All cache cleared successfully'
+    });
+  } catch (error) {
+    console.error('Clear all cache error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to clear all cache'
+    });
+  }
+});
+
+// Get unread counts for user
+router.get('/unread-counts', auth, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const unreadCounts = await sidebarCache.getAllUnreadCounts(userId);
+    
+    res.json({
+      success: true,
+      data: unreadCounts
+    });
+  } catch (error) {
+    console.error('Get unread counts error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get unread counts'
+    });
+  }
+});
+
+// Get online users
+router.get('/online-users', auth, async (req, res) => {
+  try {
+    const onlineUsers = await sidebarCache.getAllOnlineUsers();
+    
+    res.json({
+      success: true,
+      data: onlineUsers,
+      count: onlineUsers.length
+    });
+  } catch (error) {
+    console.error('Get online users error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get online users'
+    });
+  }
+});
+
+// Get online users count only
+router.get('/online-users/count', auth, async (req, res) => {
+  try {
+    const count = await sidebarCache.getOnlineUsersCount();
+    
+    res.json({
+      success: true,
+      count
+    });
+  } catch (error) {
+    console.error('Get online users count error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get online users count'
+    });
+  }
+});
+
+// Check if specific user is online
+router.get('/online-users/:userId', auth, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const isOnline = await sidebarCache.isUserOnline(userId);
+    const userInfo = isOnline ? await sidebarCache.getOnlineUserInfo(userId) : null;
+    
+    res.json({
+      success: true,
+      isOnline,
+      userInfo
+    });
+  } catch (error) {
+    console.error('Check user online status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check user online status'
+    });
+  }
+});
+
+// Debug endpoint to check cache data structure
+router.get('/debug/cache', auth, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const cachedSidebar = await sidebarCache.getUserSidebar(userId);
+    const onlineUserIds = await sidebarCache.getOnlineUserIds();
+    const unreadCounts = await sidebarCache.getAllUnreadCounts(userId);
+    
+    res.json({
+      success: true,
+      debug: {
+        cachedSidebarType: typeof cachedSidebar,
+        isArray: Array.isArray(cachedSidebar),
+        cachedSidebarLength: cachedSidebar ? cachedSidebar.length : 0,
+        onlineUserIds,
+        unreadCounts,
+        sampleCachedData: cachedSidebar && cachedSidebar.length > 0 ? cachedSidebar[0] : null
+      }
+    });
+  } catch (error) {
+    console.error('Debug cache error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to debug cache'
+    });
+  }
+});
+
 
 // In your conversation list endpoint
 router.get('/', auth, async (req, res) => {
   try {
     const userId = req.user._id;
+    
+    // Check cache first
+    const cachedSidebar = await sidebarCache.getUserSidebar(userId);
+    console.log(`🔍 Cached sidebar data type:`, typeof cachedSidebar, Array.isArray(cachedSidebar));
+    if (cachedSidebar && Array.isArray(cachedSidebar)) {
+      // Validate cached data structure before returning
+      const validatedCachedData = cachedSidebar.map(conv => {
+        if (conv && conv.participants) {
+          // Ensure participants have proper structure
+          conv.participants = conv.participants.map(participant => {
+            if (participant && participant.user) {
+              // Ensure user object has all required properties
+              if (!participant.user.isOnline) participant.user.isOnline = false;
+              if (!participant.user.name) participant.user.name = 'Unknown User';
+              if (!participant.user.email) participant.user.email = '';
+              if (!participant.user.avatar) participant.user.avatar = '';
+              if (!participant.user.status) participant.user.status = 'offline';
+              if (!participant.user.lastSeen) participant.user.lastSeen = null;
+              if (!participant.user._id) {
+                console.warn('Participant user missing _id:', participant);
+                return null; // Skip invalid participants
+              }
+              return participant;
+            }
+            return participant;
+          }).filter(p => p !== null); // Remove null participants
+        }
+        return conv;
+      });
+      
+      return res.json({
+        success: true,
+        data: validatedCachedData
+      });
+    }
+
+    // Cache miss - fetch from database
+    console.log(`🔄 Fetching sidebar data from DB for user ${userId}`);
+    
+    // Clear any potentially corrupted cache data
+    await sidebarCache.invalidateUserSidebar(userId);
+    
     const user = await User.findById(userId).populate('blockedUsers');
+    
+    // Get cached unread counts for all conversations
+    const cachedUnreadCounts = await sidebarCache.getAllUnreadCounts(userId);
+    console.log(`📊 Using cached unread counts:`, cachedUnreadCounts);
+    
+    // Get online user IDs for status display
+    const onlineUserIds = await sidebarCache.getOnlineUserIds();
+    console.log(`👥 Online users:`, onlineUserIds);
     
     const conversations = await Conversation.find({
       'participants.user': userId
@@ -94,11 +293,44 @@ router.get('/', auth, async (req, res) => {
         convObj.lastMessage = null;
       }
       
+      // Add unread count using cached value if available, otherwise calculate from DB
+      const cachedUnreadCount = cachedUnreadCounts[convObj._id.toString()];
+      if (cachedUnreadCount !== undefined) {
+        convObj.unreadCount = cachedUnreadCount;
+        console.log(`📊 Using cached unread count for conversation ${convObj._id}: ${cachedUnreadCount}`);
+      } else {
+        // Fallback to database calculation and cache the result
+        const dbUnreadCount = await conv.getUnreadCount(userId);
+        convObj.unreadCount = dbUnreadCount;
+        await sidebarCache.cacheUnreadCount(userId, convObj._id.toString(), dbUnreadCount);
+        console.log(`📊 Calculated and cached unread count for conversation ${convObj._id}: ${dbUnreadCount}`);
+      }
+      
+      // Add online status to participants
+      if (convObj.participants && convObj.participants.length > 0) {
+        convObj.participants.forEach(participant => {
+          if (participant && participant.user && participant.user._id) {
+            const participantId = participant.user._id.toString();
+            participant.user.isOnline = onlineUserIds.includes(participantId);
+            
+            // Ensure user object has all required properties
+            if (!participant.user.name) participant.user.name = 'Unknown User';
+            if (!participant.user.email) participant.user.email = '';
+            if (!participant.user.avatar) participant.user.avatar = '';
+            if (!participant.user.status) participant.user.status = 'offline';
+            if (!participant.user.lastSeen) participant.user.lastSeen = null;
+          }
+        });
+      }
+      
       return convObj;
     }));
 
     // Filter out null values (hidden conversations)
     const filteredConversations = conversationsWithBlockStatus.filter(conv => conv !== null);
+
+    // Cache the sidebar data
+    await sidebarCache.cacheUserSidebar(userId, filteredConversations);
 
     res.json({
       success: true,
@@ -521,6 +753,10 @@ router.post('/:id/admins', async (req, res) => {
       await req.socketService.makeHiddenConversationReappear(id, req.user.id);
     }
     
+    // Invalidate sidebar cache for all participants
+    const participantIds = conversation.participants.map(p => p.user._id.toString());
+    await sidebarCache.invalidateConversationMetadata(conversation._id.toString(), participantIds);
+    
     res.json({
       success: true,
       data: conversation,
@@ -627,6 +863,10 @@ router.delete('/:id/admins/:adminId', async (req, res) => {
       // Make hidden conversations reappear for all participants when system message arrives
       await req.socketService.makeHiddenConversationReappear(id, req.user.id);
     }
+    
+    // Invalidate sidebar cache for all participants
+    const participantIds = conversation.participants.map(p => p.user._id.toString());
+    await sidebarCache.invalidateConversationMetadata(conversation._id.toString(), participantIds);
     
     res.json({
       success: true,
@@ -735,6 +975,10 @@ router.put('/:id', async (req, res) => {
       );
     }
     
+    // Invalidate sidebar cache for all participants
+    const participantIds = conversation.participants.map(p => p.user._id.toString());
+    await sidebarCache.invalidateConversationMetadata(conversation._id.toString(), participantIds);
+    
     res.json({
       success: true,
       data: conversation,
@@ -750,13 +994,53 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Delete conversation (user-specific) - combines clear chat and hide chat
+// Helper function to clear chat for a user
+const clearChatForUser = async (conversationId, userId) => {
+  console.log(`🧹 CLEAR CHAT: Clearing messages for user ${userId} in conversation ${conversationId}`);
+  
+  // First, let's see how many messages exist in this conversation
+  const totalMessages = await Message.countDocuments({ conversation: conversationId });
+  console.log(`🧹 CLEAR CHAT: Total messages in conversation: ${totalMessages}`);
+  
+  // Check how many are already cleared for this user
+  const alreadyCleared = await Message.countDocuments({ 
+    conversation: conversationId,
+    clearedFor: userId 
+  });
+  console.log(`🧹 CLEAR CHAT: Messages already cleared for user ${userId}: ${alreadyCleared}`);
+  
+  // Add user to clearedFor array in all messages instead of deleting them
+  const result = await Message.updateMany(
+    { 
+      conversation: conversationId,
+      clearedFor: { $ne: userId } // Only update messages not already cleared for this user
+    },
+    { 
+      $addToSet: { clearedFor: userId }
+    }
+  );
+  
+  console.log(`🧹 CLEAR CHAT: Updated ${result.modifiedCount} messages for user ${userId}`);
+  console.log(`🧹 CLEAR CHAT: Matched ${result.matchedCount} messages, acknowledged: ${result.acknowledged}`);
+
+  // Update the participant's lastRead timestamp
+  const conversation = await Conversation.findById(conversationId);
+  const participant = conversation.participants.find(
+    p => p.user.toString() === userId.toString()
+  );
+  
+  if (participant) {
+    participant.lastRead = new Date();
+    await conversation.save();
+    console.log(`🧹 CLEAR CHAT: Updated lastRead timestamp for user ${userId}`);
+  }
+};
+
+// Delete conversation (user-specific) - first clears chat, then hides conversation
 router.post('/:conversationId/delete', auth, async (req, res) => {
   try {
     const { conversationId } = req.params;
     const userId = req.user._id;
-    
-    console.log(`🗑️ DELETE CHAT: Received delete request for conversation ${conversationId} from user ${userId}`);
 
     // Find the conversation
     const conversation = await Conversation.findById(conversationId).populate('participants.user');
@@ -779,16 +1063,8 @@ router.post('/:conversationId/delete', auth, async (req, res) => {
       });
     }
 
-    // Step 1: Clear all messages for this user (mark as cleared)
-    await Message.updateMany(
-      { 
-        conversation: conversationId,
-        clearedFor: { $ne: userId }
-      },
-      { 
-        $addToSet: { clearedFor: userId }
-      }
-    );
+    console.log(`🗑️ DELETE CHAT: User ID type: ${typeof userId}, value: ${userId}`);
+    await clearChatForUser(conversationId, userId);
 
     // Step 2: Hide the conversation for this user
     const participant = conversation.participants.find(
@@ -801,15 +1077,8 @@ router.post('/:conversationId/delete', auth, async (req, res) => {
       participant.lastRead = new Date(); // Mark as read to prevent unread notifications
       await conversation.save();
       
-      
-      // Verify the change was saved
-      const updatedConversation = await Conversation.findById(conversationId);
-      const updatedParticipant = updatedConversation.participants.find(
-        p => p.user._id.toString() === userId.toString()
-      );
     }
 
-    // Emit socket event to notify only this user
     if (req.socketService) {
       req.socketService.sendNotificationToUser(userId.toString(), 'conversation_deleted', {
         conversationId,
@@ -1200,6 +1469,12 @@ router.post('/:id/read', async (req, res) => {
         status: 'read'
       }
     );
+    
+    // Invalidate sidebar cache for this user (unread count changed)
+    await sidebarCache.invalidateUserConversationRead(userId, conversationId);
+    
+    // Reset unread count to 0 in cache
+    await sidebarCache.resetUnreadCount(userId, conversationId);
     
     res.json({
       success: true,

@@ -64,7 +64,7 @@ const ChatLayout = ({
   // Check if screen is mobile size
   useEffect(() => {
     const checkIsMobile = () => {
-      const mobile = window.innerWidth < 768; // md breakpoint
+      const mobile = window.innerWidth < 600; // md breakpoint
       setIsMobile(mobile);
       
       if (mobile) {

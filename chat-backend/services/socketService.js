@@ -2,6 +2,7 @@
 
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const sidebarCache = require('./sidebarCacheService');
 
 class SocketService {
   constructor() {
@@ -13,22 +14,79 @@ class SocketService {
     this.userLastActivity = new Map(); // userId -> timestamp (to track when user was last active)
   }
 
-  initialize(server) {
+  async initialize(server) {
     const { Server } = require('socket.io');
     
+    // Initialize Socket.IO server first
     this.io = new Server(server, {
       cors: {
         origin: process.env.CLIENT_URL || "http://localhost:3000",
         methods: ["GET", "POST"],
         credentials: true
       },
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      // Optimized ping settings to match client
+      pingInterval: 25000,
+      pingTimeout: 60000,
+      pingTimeoutRetries: 3,
     });
 
     this.setupMiddleware();
     this.setupEventHandlers();
     
-    console.log('Socket.IO server initialized');
+    // Try to configure Redis adapter (optional)
+    if (process.env.REDIS_URL && process.env.REDIS_URL !== 'disabled') {
+      try {
+        console.log('Attempting to initialize Redis adapter...');
+        const { createAdapter } = require('@socket.io/redis-adapter');
+        const { createClient } = require('redis');
+        
+        const pubClient = createClient({ 
+          url: process.env.REDIS_URL,
+          socket: {
+            reconnectStrategy: (retries) => {
+              if (retries > 3) {
+                console.log('Redis connection failed after 3 retries, using default adapter');
+                return new Error('Redis connection failed');
+              }
+              return Math.min(retries * 100, 3000);
+            }
+          }
+        });
+        
+        const subClient = pubClient.duplicate();
+        
+        // Add error handlers
+        pubClient.on('error', (err) => {
+          console.warn('Redis pub client error:', err.message);
+        });
+        
+        subClient.on('error', (err) => {
+          console.warn('Redis sub client error:', err.message);
+        });
+        
+        // Try to connect with timeout
+        const connectPromise = Promise.all([pubClient.connect(), subClient.connect()]);
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Redis connection timeout')), 5000)
+        );
+        
+        await Promise.race([connectPromise, timeoutPromise]);
+        
+        const adapter = createAdapter(pubClient, subClient);
+        this.io.adapter(adapter);
+        console.log('✅ Redis adapter initialized for Socket.IO');
+        
+      } catch (error) {
+        console.warn('⚠️ Redis adapter initialization failed:', error.message);
+        console.log('📝 Using default Socket.IO adapter (single server mode)');
+        console.log('💡 To enable Redis: Install Redis server and set REDIS_URL environment variable');
+      }
+    } else {
+      console.log('📝 Using default Socket.IO adapter (Redis URL not provided)');
+    }
+    
+    console.log('✅ Socket.IO server initialized');
   }
 
   setupMiddleware() {
@@ -43,6 +101,11 @@ class SocketService {
 
         // Verify JWT token
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        
+        // Check token expiration
+        if (decoded.exp && decoded.exp < Date.now() / 1000) {
+          return next(new Error('Token expired'));
+        }
         
         // Get user from database
         const user = await User.findById(decoded.userId).select('-password');
@@ -79,6 +142,15 @@ class SocketService {
       });
       
       this.userSockets.set(socket.id, socket.userId);
+
+      // Add user to online users cache
+      sidebarCache.addOnlineUser(socket.userId, {
+        socketId: socket.id,
+        userName: socket.user.name,
+        userEmail: socket.user.email,
+        userAgent: socket.handshake.headers['user-agent'],
+        connectedAt: new Date().toISOString()
+      });
 
       // Join user to their personal room for notifications
       socket.join(`user_${socket.userId}`);
@@ -144,6 +216,9 @@ class SocketService {
           // Update last activity time
           this.userLastActivity.set(socket.userId, new Date());
           
+          // Update activity in cache
+          await sidebarCache.updateUserActivity(socket.userId);
+          
           // Mark conversation messages as seen when explicitly viewed
           await this.markConversationMessagesAsSeen(socket, conversationId);
           
@@ -152,6 +227,12 @@ class SocketService {
         } catch (error) {
           console.error('Error handling conversation_viewed:', error);
         }
+      });
+
+      // Handle heartbeat/ping from client
+      socket.on('ping', () => {
+        console.log('Received heartbeat from user:', socket.userId);
+        socket.emit('pong');
       });
 
       // Handle sending messages
@@ -261,8 +342,11 @@ class SocketService {
       });
 
       // Handle disconnection
-      socket.on('disconnect', (reason) => {
+      socket.on('disconnect', async (reason) => {
         console.log(`User ${socket.user.name} disconnected:`, reason);
+        
+        // Remove from online users cache
+        await sidebarCache.removeOnlineUser(socket.userId);
         
         // Clean up user tracking
         this.connectedUsers.delete(socket.userId);
@@ -704,18 +788,9 @@ class SocketService {
         participant.isHidden = false;
         participant.hiddenAt = null;
         
-        // Clear the clearedFor array for this user so they see new messages
-        const clearResult = await Message.updateMany(
-          { 
-            conversation: conversationId,
-            clearedFor: participant.user
-          },
-          { 
-            $pull: { clearedFor: participant.user }
-          }
-        );
-        
-        console.log(`🧹 Cleared ${clearResult.modifiedCount} messages for user ${participant.user.toString()}`);
+        // Don't clear the clearedFor array - keep previously cleared messages cleared
+        // The user should only see new messages that arrive after the conversation reappears
+        console.log(`✅ Keeping previously cleared messages cleared for user ${participant.user.toString()}`);
         
         // Notify the user that the conversation has reappeared
         const notificationSent = this.sendNotificationToUser(

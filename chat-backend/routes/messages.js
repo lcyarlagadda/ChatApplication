@@ -8,6 +8,7 @@ const Message = require('../models/Message');
 const Conversation = require('../models/Conversation');
 const { body, validationResult } = require('express-validator');
 const cloudinary = require('../config/cloudinary');
+const sidebarCache = require('../services/sidebarCacheService');
 
 // @route   GET /api/messages/:conversationId
 // @desc    Get messages for a conversation
@@ -40,6 +41,7 @@ router.get('/:conversationId', auth, async (req, res) => {
     }
 
     // Get messages with pagination (newest first), excluding cleared messages for this user
+    console.log(`📥 FETCH MESSAGES: Fetching messages for user ${req.user.id} in conversation ${conversationId}`);
     const messages = await Message.find({ 
       conversation: conversationId,
       clearedFor: { $ne: req.user.id }
@@ -62,6 +64,8 @@ router.get('/:conversationId', auth, async (req, res) => {
 
     // Reverse to show oldest first in the response
     messages.reverse();
+    
+    console.log(`📥 FETCH MESSAGES: Returning ${messages.length} messages for user ${req.user.id} in conversation ${conversationId}`);
 
     res.json({
       success: true,
@@ -578,6 +582,16 @@ router.post('/:conversationId', auth, [
       if (onlineParticipants.length > 0) {
         await req.socketService.processMessageDelivery(message._id, onlineParticipants, req.user.id);
       }
+    }
+
+    // Invalidate sidebar cache for all conversation participants
+    const participantIds = conversation.participants.map(p => p.user._id.toString());
+    await sidebarCache.invalidateConversationCache(conversationId, participantIds);
+
+    // Increment unread count for all participants except the sender
+    const otherParticipants = conversation.participants.filter(p => p.user._id.toString() !== req.user._id.toString());
+    for (const participant of otherParticipants) {
+      await sidebarCache.incrementUnreadCount(participant.user._id.toString(), conversationId, 1);
     }
 
     res.status(201).json({
