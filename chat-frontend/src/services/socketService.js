@@ -562,7 +562,6 @@ class SocketService {
   onConversationReappeared(callback) {
     if (this.socket) {
       this.socket.on('conversation_reappeared', (data) => {
-        console.log('🔔 SOCKET: Received conversation_reappeared event:', data);
         callback(data);
       });
     }
