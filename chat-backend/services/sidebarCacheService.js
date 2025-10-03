@@ -197,10 +197,21 @@ class SidebarCacheService {
 
   // Invalidate user's entire sidebar cache
   async invalidateUserSidebar(userId) {
-    if (!this.isConnected) return false;
+    if (!this.isConnected) {
+      return false;
+    }
     
     try {
+      // Delete sidebar cache
       await this.redisClient.del(`sidebar:${userId}`);
+      
+      // Also delete any unread count caches for this user
+      const unreadPattern = `unread:${userId}:*`;
+      const unreadKeys = await this.redisClient.keys(unreadPattern);
+      if (unreadKeys.length > 0) {
+        await this.redisClient.del(unreadKeys);
+      }
+      
       return true;
     } catch (error) {
       console.warn('Sidebar invalidation error:', error.message);

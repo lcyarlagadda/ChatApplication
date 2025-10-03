@@ -1108,21 +1108,78 @@ const ChatApp = () => {
 
     // Handle conversation reappeared
     socketService.onConversationReappeared((data) => {
-      const { conversationId, senderId } = data;
+      const { conversationId, senderId, conversation } = data;
       
-      console.log(`🎉 FRONTEND: Conversation ${conversationId} reappeared due to message from ${senderId}`);
-      console.log(`🎉 FRONTEND: Current activeChat:`, activeChat?._id);
-      console.log(`🎉 FRONTEND: Current conversations count:`, conversations.length);
+      // IMMEDIATE: Use the conversation data sent directly in the socket event
+      if (conversation) {
+        
+        // Add the conversation back to the list immediately
+        updateConversations(prevConversations => {
+          const exists = prevConversations.find(conv => conv._id === conversationId);
+          if (exists) {
+            // Update existing conversation
+            return prevConversations.map(conv => 
+              conv._id === conversationId ? { ...conv, ...conversation } : conv
+            );
+          } else {
+            // Add new conversation to the top
+            return [conversation, ...prevConversations];
+          }
+        });
+        
+        // Set as active chat immediately
+        setActiveChat(conversation);
+        
+        // Fetch messages for the reappeared conversation
+        fetchMessages(conversationId);
+        
+        return; // Success, exit early
+      }
       
-      // Refresh the entire conversations list to get the restored conversation
-      refreshConversationsList(conversationId);
+      // Fallback: If no conversation data in socket event, fetch it
+      const handleConversationReappeared = async () => {
+        try {
+          // Try to get the conversation details
+          const conversationResponse = await sessionManager.authenticatedRequest(`/conversations/${conversationId}`);
+          if (conversationResponse.ok) {
+            const conversationData = await conversationResponse.json();
+            if (conversationData.success) {
+              const reappearedConversation = conversationData.data;
+              
+              // Add the conversation back to the list immediately
+              updateConversations(prevConversations => {
+                const exists = prevConversations.find(conv => conv._id === conversationId);
+                if (exists) {
+                  // Update existing conversation
+                  return prevConversations.map(conv => 
+                    conv._id === conversationId ? { ...conv, ...reappearedConversation } : conv
+                  );
+                } else {
+                  // Add new conversation to the top
+                  return [reappearedConversation, ...prevConversations];
+                }
+              });
+              
+              // Set as active chat immediately
+              setActiveChat(reappearedConversation);
+              
+              // Fetch messages for the reappeared conversation
+              fetchMessages(conversationId);
+              
+              return; // Success, exit early
+            }
+          }
+        } catch (error) {
+          console.error(`🎉 FRONTEND: Error fetching conversation details:`, error);
+        }
+        
+        // Final fallback: Refresh the entire conversations list
+        console.log(`🎉 FRONTEND: Final fallback - refreshing entire conversations list`);
+        refreshConversationsList(conversationId);
+      };
       
-      // Always fetch messages for the reappeared conversation
-      console.log(`🎉 FRONTEND: Fetching messages for reappeared conversation ${conversationId}`);
-      fetchMessages(conversationId);
-      
-      // Show notification that conversation reappeared
-      // Removed conversation reappeared notification
+      // Execute fallback
+      handleConversationReappeared();
     });
 
     // Handle conversation deleted

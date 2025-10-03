@@ -156,7 +156,8 @@ conversationSchema.methods.getUnreadCount = async function(userId) {
     conversation: this._id,
     createdAt: { $gt: participant.lastRead },
     sender: { $ne: userId },
-    isDeleted: { $ne: true }
+    isDeleted: { $ne: true },
+    clearedFor: { $ne: userId } // Exclude messages cleared for this user
   });
   
   return count;

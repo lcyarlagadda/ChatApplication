@@ -1126,7 +1126,14 @@ router.get('/:conversationId/unread-count', auth, async (req, res) => {
       });
     }
 
-    const unreadCount = await conversation.getUnreadCount(userId);
+    // Try cache first, then fallback to DB
+    let unreadCount = await sidebarCache.getUnreadCount(userId, conversationId);
+    
+    if (unreadCount === null) {
+      // Cache miss - calculate from DB and cache the result
+      unreadCount = await conversation.getUnreadCount(userId);
+      await sidebarCache.cacheUnreadCount(userId, conversationId, unreadCount);
+    }
 
     res.json({
       success: true,

@@ -162,6 +162,74 @@ router.get('/debug/cache', auth, async (req, res) => {
   }
 });
 
+// Debug endpoint to test conversation reappearing
+router.post('/debug/test-reappear', auth, async (req, res) => {
+  try {
+    const { conversationId } = req.body;
+    const userId = req.user._id;
+    
+    if (!conversationId) {
+      return res.status(400).json({
+        success: false,
+        message: 'conversationId is required'
+      });
+    }
+    
+    // Check if conversation exists and user is participant
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Conversation not found'
+      });
+    }
+    
+    const isParticipant = conversation.participants.some(
+      p => p.user.toString() === userId.toString()
+    );
+    
+    if (!isParticipant) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not a participant in this conversation'
+      });
+    }
+    
+    // Find the user's participant record
+    const participant = conversation.participants.find(
+      p => p.user.toString() === userId.toString()
+    );
+    
+    const debugInfo = {
+      conversationId,
+      userId,
+      participantExists: !!participant,
+      isHidden: participant ? participant.isHidden : null,
+      hiddenAt: participant ? participant.hiddenAt : null,
+      isOnline: req.socketService ? req.socketService.isUserOnline(userId) : false,
+      cacheInvalidated: await sidebarCache.invalidateUserSidebar(userId)
+    };
+    
+    // Test the reappear functionality
+    if (req.socketService) {
+      await req.socketService.makeHiddenConversationReappear(conversationId, userId);
+    }
+    
+    res.json({
+      success: true,
+      message: 'Test completed',
+      debug: debugInfo
+    });
+  } catch (error) {
+    console.error('Debug test reappear error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to test reappear functionality',
+      error: error.message
+    });
+  }
+});
+
 
 // In your conversation list endpoint
 router.get('/', auth, async (req, res) => {
@@ -239,19 +307,37 @@ router.get('/', auth, async (req, res) => {
     const conversationsWithBlockStatus = await Promise.all(conversations.map(async (conv) => {
       const convObj = conv.toObject();
       
-      // Check if this conversation is hidden for the current user
-      const currentUserParticipant = convObj.participants.find(p => p.user._id.toString() === userId.toString());
-      if (currentUserParticipant && currentUserParticipant.isHidden) {
-        // Check if user left the conversation (has leftAt timestamp)
-        if (currentUserParticipant.leftAt) {
-          // Keep the conversation but mark it as left
-          convObj.userLeft = true;
-          convObj.leftAt = currentUserParticipant.leftAt;
+    // Check if this conversation is hidden for the current user
+    const currentUserParticipant = convObj.participants.find(p => p.user._id.toString() === userId.toString());
+    if (currentUserParticipant && currentUserParticipant.isHidden) {
+      // Check if user left the conversation (has leftAt timestamp)
+      if (currentUserParticipant.leftAt) {
+        // Keep the conversation but mark it as left
+        convObj.userLeft = true;
+        convObj.leftAt = currentUserParticipant.leftAt;
+      } else {
+        // Check if conversation has new messages since it was hidden
+        // If so, make it reappear by updating the database
+        if (convObj.lastMessage && convObj.lastMessage.timestamp) {
+          const lastMessageTime = new Date(convObj.lastMessage.timestamp);
+          const hiddenTime = currentUserParticipant.hiddenAt ? new Date(currentUserParticipant.hiddenAt) : new Date(0);
+          
+          if (lastMessageTime > hiddenTime) {
+            // Update the participant to make conversation reappear
+            currentUserParticipant.isHidden = false;
+            currentUserParticipant.hiddenAt = null;
+            
+            // Save the conversation
+            await conv.save();
+          } else {
+            return null; // Skip this conversation for the current user (regular hidden conversation)
+          }
         } else {
           return null; // Skip this conversation for the current user (regular hidden conversation)
         }
-      } else if (currentUserParticipant) {
       }
+    } else if (currentUserParticipant) {
+    }
       
       if (convObj.type === 'direct') {
         const otherParticipant = convObj.participants.find(p => p.user._id.toString() !== userId.toString());
@@ -322,6 +408,18 @@ router.get('/', auth, async (req, res) => {
 
     // Cache the sidebar data
     await sidebarCache.cacheUserSidebar(userId, filteredConversations);
+    
+    // Warm the unread count cache for all conversations
+    for (const conv of filteredConversations) {
+      const conversationId = conv._id.toString();
+      const cachedCount = await sidebarCache.getUnreadCount(userId, conversationId);
+      
+      if (cachedCount === null) {
+        // Cache miss - calculate and cache
+        const dbCount = await conv.getUnreadCount(userId);
+        await sidebarCache.cacheUnreadCount(userId, conversationId, dbCount);
+      }
+    }
 
     res.json({
       success: true,
@@ -355,12 +453,24 @@ router.get('/unread-counts', auth, async (req, res) => {
       });
     }
 
-    // Calculate unread counts for each conversation
+    // Get unread counts using cache first, then fallback to DB
     const unreadCounts = {};
     
     await Promise.all(conversations.map(async (conv) => {
-      const count = await conv.getUnreadCount(userId);
-      unreadCounts[conv._id.toString()] = count;
+      const conversationId = conv._id.toString();
+      
+      // Try to get from cache first
+      const cachedCount = await sidebarCache.getUnreadCount(userId, conversationId);
+      
+      if (cachedCount !== null) {
+        // Use cached value
+        unreadCounts[conversationId] = cachedCount;
+      } else {
+        // Cache miss - calculate from DB and cache the result
+        const dbCount = await conv.getUnreadCount(userId);
+        unreadCounts[conversationId] = dbCount;
+        await sidebarCache.cacheUnreadCount(userId, conversationId, dbCount);
+      }
     }));
 
 
@@ -407,7 +517,14 @@ router.get('/:id', async (req, res) => {
       });
     }
     
-    const unreadCount = await conversation.getUnreadCount(userId);
+    // Try cache first, then fallback to DB
+    let unreadCount = await sidebarCache.getUnreadCount(userId, conversationId);
+    
+    if (unreadCount === null) {
+      // Cache miss - calculate from DB and cache the result
+      unreadCount = await conversation.getUnreadCount(userId);
+      await sidebarCache.cacheUnreadCount(userId, conversationId, unreadCount);
+    }
     
     res.json({
       success: true,
@@ -1009,6 +1126,10 @@ const clearChatForUser = async (conversationId, userId) => {
     participant.lastRead = new Date();
     await conversation.save();
   }
+  
+  // Invalidate cache for this user's unread count (should be 0 after clearing)
+  await sidebarCache.invalidateUserConversationRead(userId, conversationId);
+  await sidebarCache.resetUnreadCount(userId, conversationId);
 };
 
 // Delete conversation (user-specific) - first clears chat, then hides conversation
@@ -1431,7 +1552,8 @@ router.post('/:id/read', async (req, res) => {
         conversation: id,
         sender: { $ne: userId },
         createdAt: { $gt: lastRead },
-        isDeleted: { $ne: true }
+        isDeleted: { $ne: true },
+        clearedFor: { $ne: userId } // Exclude messages cleared for this user
       },
       {
         $addToSet: {
@@ -1556,6 +1678,10 @@ router.post('/:conversationId/clear', auth, async (req, res) => {
       
       await conversation.save();
     }
+    
+    // Invalidate cache for this user's unread count (should be 0 after clearing)
+    await sidebarCache.invalidateUserConversationRead(userId, conversationId);
+    await sidebarCache.resetUnreadCount(userId, conversationId);
 
     // Emit socket event to notify only this user
     if (req.socketService) {

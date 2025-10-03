@@ -12,6 +12,7 @@ class SocketService {
     this.conversationRooms = new Map(); // conversationId -> Set of socketIds
     this.activeChats = new Map(); // userId -> conversationId (currently viewing)
     this.userLastActivity = new Map(); // userId -> timestamp (to track when user was last active)
+    this.offlineNotifications = new Map(); // userId -> Array of notifications to send when they come online
   }
 
   async initialize(server) {
@@ -142,6 +143,11 @@ class SocketService {
       });
       
       this.userSockets.set(socket.id, socket.userId);
+      
+      // Send any pending offline notifications (async, don't await)
+      this.sendPendingOfflineNotifications(socket.userId).catch(error => {
+        console.error('Error sending pending offline notifications:', error);
+      });
 
       // Add user to online users cache
       sidebarCache.addOnlineUser(socket.userId, {
@@ -753,69 +759,69 @@ class SocketService {
     const Message = require('../models/Message');
     
     try {
-      console.log(`🔍 makeHiddenConversationReappear called for conversation ${conversationId}, sender: ${senderId}`);
-      
       const conversation = await Conversation.findById(conversationId);
       if (!conversation) {
-        console.log(`❌ Conversation ${conversationId} not found`);
         return;
       }
-      
-      console.log(`📋 Conversation participants before restoration:`, conversation.participants.map(p => ({ 
-        userId: p.user.toString(), 
-        isHidden: p.isHidden, 
-        hiddenAt: p.hiddenAt 
-      })));
       
       // Find all participants who have hidden this conversation (excluding the sender)
       const hiddenParticipants = conversation.participants.filter(
         p => p.isHidden === true && p.user.toString() !== senderId
       );
       
-      console.log(`🔍 Found ${hiddenParticipants.length} hidden participants:`, 
-        hiddenParticipants.map(p => ({ userId: p.user.toString(), isHidden: p.isHidden, hiddenAt: p.hiddenAt }))
-      );
-      
       if (hiddenParticipants.length === 0) {
-        console.log(`ℹ️ No hidden participants found for conversation ${conversationId}`);
         return;
       }
       
       // Make conversation reappear for all hidden participants (except sender)
       for (const participant of hiddenParticipants) {
-        console.log(`🔄 Restoring conversation ${conversationId} for user ${participant.user.toString()}`);
-        
         participant.isHidden = false;
         participant.hiddenAt = null;
         
         // Don't clear the clearedFor array - keep previously cleared messages cleared
         // The user should only see new messages that arrive after the conversation reappears
-        console.log(`✅ Keeping previously cleared messages cleared for user ${participant.user.toString()}`);
         
-        // Notify the user that the conversation has reappeared
+        // CRITICAL: Invalidate sidebar cache for this user so they get fresh data
+        await sidebarCache.invalidateUserSidebar(participant.user.toString());
+        
+        // ADDITIONAL: Also invalidate conversation-specific cache
+        await sidebarCache.invalidateConversationCache(conversationId, [participant.user.toString()]);
+        
+        // Check if user is online before sending notification
+        const isUserOnline = this.isUserOnline(participant.user.toString());
+        
+        // Get fresh conversation data to send with the event
+        const freshConversation = await Conversation.findById(conversationId)
+          .populate('participants.user', 'name email avatar status lastSeen isOnline')
+          .populate('admin', 'name email avatar')
+          .populate('admins', 'name email avatar')
+          .populate('lastMessage.sender', 'name avatar');
+        
+        // Notify the user that the conversation has reappeared with full data
         const notificationSent = this.sendNotificationToUser(
           participant.user.toString(),
           'conversation_reappeared',
           {
             conversationId: conversation._id,
             senderId: senderId,
-            timestamp: new Date()
+            timestamp: new Date(),
+            conversation: freshConversation ? freshConversation.toObject() : null
           }
         );
         
-        console.log(`📢 Sent conversation_reappeared notification to user ${participant.user.toString()}: ${notificationSent}`);
+        // If user is not online, store the notification for when they reconnect
+        if (!isUserOnline) {
+          // Store the reappeared conversation info for when user comes back online
+          await this.storeOfflineNotification(participant.user.toString(), 'conversation_reappeared', {
+            conversationId: conversation._id,
+            senderId: senderId,
+            timestamp: new Date(),
+            conversation: freshConversation ? freshConversation.toObject() : null
+          });
+        }
       }
       
       await conversation.save();
-      console.log(`✅ Conversation ${conversationId} restored and saved successfully`);
-      
-      // Verify the changes were saved
-      const updatedConversation = await Conversation.findById(conversationId);
-      console.log(`📋 Conversation participants after restoration:`, updatedConversation.participants.map(p => ({ 
-        userId: p.user.toString(), 
-        isHidden: p.isHidden, 
-        hiddenAt: p.hiddenAt 
-      })));
     } catch (error) {
       console.error('Error making hidden conversation reappear:', error);
     }
@@ -1113,12 +1119,10 @@ class SocketService {
   sendNotificationToUser(userId, event, data) {
     const socketId = this.getUserSocket(userId);
     if (socketId) {
-      console.log(`SOCKET: Sending ${event} to user ${userId} via socket ${socketId}`);
       // Send directly to the socket instead of using rooms to avoid cross-user issues
       socketId.emit(event, data);
       return true;
     }
-    console.log(`SOCKET: User ${userId} not found for event ${event}`);
     return false;
   }
 
@@ -1135,6 +1139,41 @@ class SocketService {
     } else {
       this.io.to(`conversation_${conversationId}`).emit(event, data);
     }
+  }
+
+  // Store notification for offline user
+  async storeOfflineNotification(userId, event, data) {
+    if (!this.offlineNotifications.has(userId)) {
+      this.offlineNotifications.set(userId, []);
+    }
+    
+    const notifications = this.offlineNotifications.get(userId);
+    notifications.push({
+      event,
+      data,
+      timestamp: new Date()
+    });
+    
+    // Keep only the last 10 notifications per user to prevent memory issues
+    if (notifications.length > 10) {
+      notifications.splice(0, notifications.length - 10);
+    }
+    
+  }
+
+  // Send pending offline notifications when user comes online
+  async sendPendingOfflineNotifications(userId) {
+    const notifications = this.offlineNotifications.get(userId);
+    if (!notifications || notifications.length === 0) {
+      return;
+    }
+    
+    for (const notification of notifications) {
+      this.sendNotificationToUser(userId, notification.event, notification.data);
+    }
+    
+    // Clear the notifications after sending
+    this.offlineNotifications.delete(userId);
   }
 }
 
