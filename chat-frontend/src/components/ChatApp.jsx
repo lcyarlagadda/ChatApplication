@@ -1170,11 +1170,10 @@ const ChatApp = () => {
             }
           }
         } catch (error) {
-          console.error(`🎉 FRONTEND: Error fetching conversation details:`, error);
+          console.error('Error fetching conversation details:', error);
         }
         
         // Final fallback: Refresh the entire conversations list
-        console.log(`🎉 FRONTEND: Final fallback - refreshing entire conversations list`);
         refreshConversationsList(conversationId);
       };
       
