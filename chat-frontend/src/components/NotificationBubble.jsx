@@ -3,18 +3,32 @@ import { MessageSquare, X, Bell } from 'lucide-react';
 
 const NotificationBubble = ({ 
   notifications, 
+  systemNotifications,
   onNotificationClick, 
   onDismiss, 
+  onSystemNotificationDismiss,
   isDark 
 }) => {
   const [visibleNotifications, setVisibleNotifications] = useState([]);
 
   // Update visible notifications when notifications prop changes
   useEffect(() => {
+    const allNotifications = [];
+    
+    // Add message notifications
     if (notifications && notifications.length > 0) {
-      setVisibleNotifications(notifications);
+      allNotifications.push(...notifications);
     }
-  }, [notifications]);
+    
+    // Add system notifications
+    if (systemNotifications && systemNotifications.length > 0) {
+      allNotifications.push(...systemNotifications);
+    }
+    
+    if (allNotifications.length > 0) {
+      setVisibleNotifications(allNotifications);
+    }
+  }, [notifications, systemNotifications]);
 
   const handleNotificationClick = (notification) => {
     
@@ -28,7 +42,13 @@ const NotificationBubble = ({
     setVisibleNotifications(prev => 
       prev.filter(notif => notif.id !== notificationId)
     );
-    if (onDismiss) {
+    
+    // Check if it's a system notification
+    const isSystemNotification = systemNotifications?.some(notif => notif.id === notificationId);
+    
+    if (isSystemNotification && onSystemNotificationDismiss) {
+      onSystemNotificationDismiss(notificationId);
+    } else if (onDismiss) {
       onDismiss(notificationId);
     }
   };
@@ -50,59 +70,81 @@ const NotificationBubble = ({
 
   return (
     <div className="fixed top-4 right-4 z-[9999] space-y-3">
-      {visibleNotifications.map((notification) => (
-        <div
-          key={notification.id}
-          className={`w-96 bg-white/95 dark:bg-gray-800/95 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-200/50 dark:border-gray-700/50 transform transition-all duration-500 ease-out hover:scale-[1.02] hover:shadow-3xl cursor-pointer animate-in slide-in-from-right-full relative z-[9999]`}
-          onClick={() => handleNotificationClick(notification)}
-          style={{
-            animation: 'slideInRight 0.5s ease-out',
-            zIndex: 9999
-          }}
-        >
-          <div className="p-3">
-            <div className="flex items-center space-x-3">
-              {/* Conversation avatar */}
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-md flex-shrink-0 ${
-                notification.conversation.type === 'broadcast'
-                  ? 'bg-gradient-to-br from-purple-500 to-pink-600'
-                  : notification.conversation.type === 'group'
-                  ? 'bg-gradient-to-br from-green-500 to-teal-600'
-                  : 'bg-gradient-to-br from-blue-500 to-purple-600'
-              }`}>
-                <span className="text-white text-sm font-bold">
-                  {notification.conversation.avatar || 
-                   notification.conversation.name?.charAt(0).toUpperCase() || 
-                   notification.sender?.name?.charAt(0).toUpperCase() || "👤"}
-                </span>
-              </div>
+      {visibleNotifications.map((notification) => {
+        // Check if it's a system notification (has type but no conversation)
+        const isSystemNotification = notification.type && !notification.conversation;
+        
+        return (
+          <div
+            key={notification.id}
+            className={`w-96 bg-white/95 dark:bg-gray-800/95 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-200/50 dark:border-gray-700/50 transform transition-all duration-500 ease-out hover:scale-[1.02] hover:shadow-3xl cursor-pointer animate-in slide-in-from-right-full relative z-[9999]`}
+            onClick={() => !isSystemNotification && handleNotificationClick(notification)}
+            style={{
+              animation: 'slideInRight 0.5s ease-out',
+              zIndex: 9999
+            }}
+          >
+            <div className="p-3">
+              <div className="flex items-center space-x-3">
+                {/* Icon for system notifications or avatar for message notifications */}
+                {isSystemNotification ? (
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-md flex-shrink-0 ${
+                    notification.type === 'success'
+                      ? 'bg-gradient-to-br from-green-500 to-emerald-600'
+                      : notification.type === 'error'
+                      ? 'bg-gradient-to-br from-red-500 to-pink-600'
+                      : notification.type === 'info'
+                      ? 'bg-gradient-to-br from-blue-500 to-cyan-600'
+                      : 'bg-gradient-to-br from-gray-500 to-slate-600'
+                  }`}>
+                    <Bell className="w-5 h-5 text-white" />
+                  </div>
+                ) : (
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-md flex-shrink-0 ${
+                    notification.conversation.type === 'broadcast'
+                      ? 'bg-gradient-to-br from-purple-500 to-pink-600'
+                      : notification.conversation.type === 'group'
+                      ? 'bg-gradient-to-br from-green-500 to-teal-600'
+                      : 'bg-gradient-to-br from-blue-500 to-purple-600'
+                  }`}>
+                    <span className="text-white text-sm font-bold">
+                      {notification.conversation.avatar || 
+                       notification.conversation.name?.charAt(0).toUpperCase() || 
+                       notification.sender?.name?.charAt(0).toUpperCase() || "👤"}
+                    </span>
+                  </div>
+                )}
 
-              {/* Notification content */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                    {notification.conversation.name || notification.sender?.name || 'Unknown'}
+                {/* Notification content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                      {isSystemNotification 
+                        ? 'System Notification'
+                        : notification.conversation.name || notification.sender?.name || 'Unknown'
+                      }
+                    </p>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDismiss(notification.id);
+                      }}
+                      className="flex-shrink-0 p-1 rounded-full hover:bg-gray-100/80 dark:hover:bg-gray-700/80 transition-all duration-200 ml-2"
+                    >
+                      <X className="w-4 h-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" />
+                    </button>
+                  </div>
+
+                  {/* Message preview or system message */}
+                  <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-1 leading-relaxed">
+                    {isSystemNotification ? notification.message : notification.messagePreview}
                   </p>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDismiss(notification.id);
-                    }}
-                    className="flex-shrink-0 p-1 rounded-full hover:bg-gray-100/80 dark:hover:bg-gray-700/80 transition-all duration-200 ml-2"
-                  >
-                    <X className="w-4 h-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" />
-                  </button>
                 </div>
-
-                {/* Message preview */}
-                <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-1 leading-relaxed">
-                  {notification.messagePreview}
-                </p>
               </div>
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };

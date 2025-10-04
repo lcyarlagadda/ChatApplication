@@ -155,14 +155,13 @@ export const usersService = {
     return await response.json();
   },
 
-  // Block or unblock a user
-  async blockUser(userId, blocked = true) {
+  // Block a user
+  async blockUser(userId) {
     try {
       const response = await sessionManager.authenticatedRequest(
         API_CONFIG.ENDPOINTS.USERS.BLOCK_USER(userId),
         {
-          method: 'PUT',
-          body: JSON.stringify({ blocked })
+          method: 'POST'
         }
       );
       return await response.json();
@@ -171,15 +170,46 @@ export const usersService = {
         throw new Error('User not found');
       }
       if (error.response?.status === 400) {
-        throw new Error(error.response.data?.message || 'Cannot block/unblock user');
+        throw new Error(error.response.data?.message || 'Cannot block user');
       }
       throw error;
     }
   },
 
-  // Unblock a user (convenience method)
+  // Unblock a user
   async unblockUser(userId) {
-    return this.blockUser(userId, false);
+    try {
+      const response = await sessionManager.authenticatedRequest(
+        API_CONFIG.ENDPOINTS.USERS.UNBLOCK_USER(userId),
+        {
+          method: 'POST'
+        }
+      );
+      return await response.json();
+    } catch (error) {
+      if (error.response?.status === 404) {
+        throw new Error('User not found');
+      }
+      if (error.response?.status === 400) {
+        throw new Error(error.response.data?.message || 'Cannot unblock user');
+      }
+      throw error;
+    }
+  },
+
+  // Get block status for a user
+  async getBlockStatus(userId) {
+    try {
+      const response = await sessionManager.authenticatedRequest(
+        API_CONFIG.ENDPOINTS.USERS.BLOCK_STATUS(userId)
+      );
+      return await response.json();
+    } catch (error) {
+      if (error.response?.status === 404) {
+        throw new Error('User not found');
+      }
+      throw error;
+    }
   },
 
   // Search users with additional filters

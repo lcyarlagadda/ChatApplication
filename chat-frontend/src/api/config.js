@@ -63,6 +63,8 @@ const API_CONFIG = {
       CREATE_CONVERSATION: (id) => `/users/${id}/conversation`,
       MUTUAL_CONVERSATIONS: (id) => `/users/${id}/mutual-conversations`,
       BLOCK_USER: (id) => `/users/${id}/block`,
+      UNBLOCK_USER: (id) => `/users/${id}/unblock`,
+      BLOCK_STATUS: (id) => `/users/${id}/block-status`,
       REPORT_USER: (id) => `/users/${id}/report`,
       
       // Additional endpoints

@@ -52,6 +52,7 @@ const ChatApp = () => {
   const [showLogin, setShowLogin] = useState(!currentUser);
   const [messageStatuses, setMessageStatuses] = useState({});
   const [notification, setNotification] = useState(null);
+  const [systemNotifications, setSystemNotifications] = useState([]);
   const [messageNotifications, setMessageNotifications] = useState([]);
 
   // Update showLogin when currentUser changes
@@ -131,8 +132,35 @@ const ChatApp = () => {
   }, [currentUser?._id]);
 
   const showNotification = (message, type = "success") => {
-    setNotification({ message, type });
+    // Create system notification object
+    const notificationId = `system-${Date.now()}-${Math.random()}`;
+    const systemNotification = {
+      id: notificationId,
+      message,
+      type,
+      timestamp: new Date().toISOString()
+    };
+
+    // Add to system notifications
+    setSystemNotifications(prev => [...prev, systemNotification]);
+
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+      setSystemNotifications(prev => 
+        prev.filter(notif => notif.id !== notificationId)
+      );
+    }, 5000);
+
+    // Keep the old notification system for backward compatibility (but don't show it)
+    setNotification({ message: "", type });
     setTimeout(() => setNotification(null), 3000);
+  };
+
+  // System notification dismissal
+  const dismissSystemNotification = (notificationId) => {
+    setSystemNotifications(prev => 
+      prev.filter(notif => notif.id !== notificationId)
+    );
   };
 
   // Notification management functions
@@ -846,6 +874,7 @@ const ChatApp = () => {
       console.log("Socket: User unblocked event received", {
         unblockedUserId,
         unblockedUser,
+        fullData: data
       });
 
       // Update current user's blocked list in context
@@ -950,6 +979,12 @@ const ChatApp = () => {
 
     socketService.onUserUnblockedYou((data) => {
       const { unblockedByUserId, unblockedByUser, timestamp } = data;
+
+      console.log("Socket: User unblocked you event received", {
+        unblockedByUserId,
+        unblockedByUser,
+        fullData: data
+      });
 
       // Update conversations to show that current user is unblocked
       updateConversations(
@@ -2669,9 +2704,16 @@ const ChatApp = () => {
         console.log("Current block status from server:", statusData);
       } else {
         console.error("Failed to get block status:", statusResponse.status);
+        try {
+          const errorData = await statusResponse.json();
+          console.error("Block status error details:", errorData);
+        } catch (e) {
+          console.error("Could not parse block status error response");
+        }
         // Fallback: check local user data
         isCurrentlyBlocked =
           currentUser?.blockedUsers?.includes(userId) || false;
+        console.log("Using fallback block status:", isCurrentlyBlocked);
       }
 
       // Determine the correct endpoint
@@ -2687,9 +2729,11 @@ const ChatApp = () => {
         }
       );
 
+      console.log(`Block/Unblock response status: ${response.status}`);
       const result = await response.json();
+      console.log(`Block/Unblock result:`, result);
 
-      if (result.success) {
+      if (response.ok && result.success) {
         // Update current user's blocked list in context
         setCurrentUser((prev) => {
           const newBlockedUsers = isCurrentlyBlocked
@@ -2944,8 +2988,10 @@ const ChatApp = () => {
       {/* Message Notification Bubbles */}
       <NotificationBubble
         notifications={messageNotifications}
+        systemNotifications={systemNotifications}
         onNotificationClick={handleNotificationClick}
         onDismiss={dismissNotification}
+        onSystemNotificationDismiss={dismissSystemNotification}
         isDark={isDark}
       />
 

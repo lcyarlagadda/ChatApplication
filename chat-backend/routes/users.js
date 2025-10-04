@@ -711,7 +711,22 @@ router.post('/:userId/block', auth, async (req, res) => {
     currentUser.lastSeen = new Date();
     await currentUser.save();
 
-    // Removed block notification events
+    // Emit socket events for real-time updates
+    if (req.socketService) {
+      // Notify the user who was blocked
+      req.socketService.sendNotificationToUser(userId.toString(), 'user_blocked_you', {
+        blockedByUserId: currentUserId.toString(),
+        blockedByUser: currentUser.getPublicProfile(),
+        timestamp: new Date().toISOString()
+      });
+      
+      // Notify the current user (blocker)
+      req.socketService.sendNotificationToUser(currentUserId.toString(), 'user_blocked', {
+        blockedUserId: userId.toString(),
+        blockedUser: targetUser.getPublicProfile(),
+        timestamp: new Date().toISOString()
+      });
+    }
 
     res.json({
       success: true,
@@ -783,7 +798,22 @@ router.post('/:userId/unblock', auth, async (req, res) => {
     currentUser.lastSeen = new Date();
     await currentUser.save();
 
-    // Removed unblock notification events
+    // Emit socket events for real-time updates
+    if (req.socketService) {
+      // Notify the user who was unblocked
+      req.socketService.sendNotificationToUser(userId.toString(), 'user_unblocked_you', {
+        unblockedByUserId: currentUserId.toString(),
+        unblockedByUser: currentUser.getPublicProfile(),
+        timestamp: new Date().toISOString()
+      });
+      
+      // Notify the current user (unblocker)
+      req.socketService.sendNotificationToUser(currentUserId.toString(), 'user_unblocked', {
+        unblockedUserId: userId.toString(),
+        unblockedUser: targetUser.getPublicProfile(),
+        timestamp: new Date().toISOString()
+      });
+    }
 
     res.json({
       success: true,
