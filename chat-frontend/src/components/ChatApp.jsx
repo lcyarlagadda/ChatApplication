@@ -15,6 +15,8 @@ import {
 } from "../utils/fileHelpers";
 import ObjectId from "../utils/ObjectId";
 import NotificationBubble from "./NotificationBubble";
+import OfflineIndicator from "./OfflineIndicator";
+import offlineManager from "../services/offlineManager";
 
 const ChatApp = () => {
   const {
@@ -1202,6 +1204,25 @@ const ChatApp = () => {
         setActiveChat(null);
       }
     });
+
+    // Handle offline message sync events
+    const handleOfflineMessageSent = (event) => {
+      const { messageId, conversationId, serverMessage } = event.detail;
+      
+      // Remove the original queued message from UI
+      // The server will send the new message via socket
+      setMessages((prev) => ({
+        ...prev,
+        [conversationId]: prev[conversationId]?.filter((msg) => 
+          msg._id !== messageId
+        ) || [],
+      }));
+    };
+
+    window.addEventListener('offlineMessageSent', handleOfflineMessageSent);
+    
+    // Store reference for cleanup
+    window._offlineMessageHandler = handleOfflineMessageSent;
   };
 
   const cleanupSocketListeners = () => {
@@ -1229,6 +1250,10 @@ const ChatApp = () => {
     socketService.off("admin_transferred");
     socketService.off("promoted_to_admin");
     socketService.off("conversation_cleared");
+    if (window._offlineMessageHandler) {
+      window.removeEventListener('offlineMessageSent', window._offlineMessageHandler);
+      delete window._offlineMessageHandler;
+    }
   };
 
   const initializeUserData = async () => {
@@ -1664,37 +1689,60 @@ const ChatApp = () => {
         messageData.replyTo = replyTo;
       }
 
-      // Send message using authenticated request
-      const response = await sessionManager.authenticatedRequest(
-        `/messages/${conversationId}`,
-        {
-          method: "POST",
-          body: JSON.stringify(messageData),
+      // Clear draft when sending
+      offlineManager.clearDraft(conversationId);
+
+      // Try normal sending first (when online)
+      if (navigator.onLine) {
+        try {
+          const response = await sessionManager.authenticatedRequest(
+            `/messages/${conversationId}`,
+            {
+              method: "POST",
+              body: JSON.stringify(messageData),
+            }
+          );
+
+          const result = await response.json();
+
+          if (result.success) {
+            // Update message status to sent
+            setMessages((prev) => ({
+              ...prev,
+              [conversationId]: prev[conversationId].map((msg) =>
+                msg._id === messageId
+                  ? { 
+                      ...msg, 
+                      status: "sent",
+                      createdAt: result.data.createdAt 
+                    }
+                  : msg
+              ),
+            }));
+            return; // Success, exit early
+          } else {
+            throw new Error(result.message || "Failed to send message");
+          }
+        } catch (error) {
+          // If normal sending fails, fall back to offline manager
         }
-      );
-
-      const result = await response.json();
-
-      if (!result.success) {
-        // Remove message on error
-        setMessages((prev) => ({
-          ...prev,
-          [conversationId]: prev[conversationId].filter(
-            (msg) => msg._id !== messageId
-          ),
-        }));
-        throw new Error(result.message || "Failed to send message");
       }
 
-      // Update message status to sent (only if not already updated by socket events)
+      // Fallback to offline manager (for offline or when normal send fails)
+      const result = await offlineManager.sendMessage({
+        ...messageData,
+        conversationId
+      });
+
+      // Update message status based on result
       setMessages((prev) => ({
         ...prev,
         [conversationId]: prev[conversationId].map((msg) =>
           msg._id === messageId
             ? { 
                 ...msg, 
-                status: msg.status === "sending" ? "sent" : msg.status, // Don't override delivered/read
-                createdAt: result.data.createdAt 
+                status: result.status || (navigator.onLine ? "sending" : "queued"),
+                isOffline: !navigator.onLine
               }
             : msg
         ),
@@ -2872,6 +2920,7 @@ const ChatApp = () => {
   // Show main chat application
   return (
     <div>
+      <OfflineIndicator />
       {notification && notification.message !== "" && (
         <div
           className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg transition-all ${

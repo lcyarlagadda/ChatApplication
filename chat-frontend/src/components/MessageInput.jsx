@@ -12,6 +12,7 @@ import {
 import { isFileMessage, getReplyPreviewText } from "../utils/fileHelpers";
 import EmojiPicker from "./Pickers/EmojiPicker";
 import GifPicker from "./Pickers/GifPicker";
+import offlineManager from "../services/offlineManager";
 
 const MessageInput = ({
   isDark,
@@ -33,6 +34,32 @@ const MessageInput = ({
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const lastTypingTime = useRef(0);
+
+  // Load draft when conversation changes
+  useEffect(() => {
+    if (activeChat?._id) {
+      const draft = offlineManager.getDraft(activeChat._id);
+      if (draft) {
+        setMessage(draft);
+      } else {
+        setMessage("");
+      }
+    }
+  }, [activeChat?._id]);
+
+  // Save draft when message changes
+  useEffect(() => {
+    if (activeChat?._id && message.trim()) {
+      const timeoutId = setTimeout(() => {
+        offlineManager.saveDraft(activeChat._id, message);
+      }, 500); // Debounce for 500ms
+
+      return () => clearTimeout(timeoutId);
+    } else if (activeChat?._id && !message.trim()) {
+      // Clear draft if message becomes empty
+      offlineManager.clearDraft(activeChat._id);
+    }
+  }, [message, activeChat?._id]);
 
   // Check if user can send messages in this conversation
   const canSendMessage = () => {

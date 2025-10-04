@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Reply, Smile, Forward, Trash2, Edit3 } from 'lucide-react';
+import { Reply, Smile, Forward, Trash2, Edit3, Clock } from 'lucide-react';
 import ReactionPicker from "./Pickers/ReactionPicker";
 import DeleteModal from "./Modals/DeleteModal";
 import FileThumbnail from "./Thumbnail";
@@ -300,7 +300,14 @@ const RegularMessage = ({
 
             <div className={`flex items-center justify-between mt-1 text-xs ${isOwn ? "text-blue-100" : "text-gray-500"}`}>
               <span>{formatTime(message.createdAt || message.timestamp)}</span>
-              {isOwn && message.status && <div className="ml-2">{getStatusIcon(message.status)}</div>}
+              <div className="flex items-center gap-1">
+                {isOwn && message.status && <div className="ml-2">{getStatusIcon(message.status)}</div>}
+                {message.isOffline && (
+                  <span className="text-orange-400" title="Message sent while offline">
+                    <Clock size={12} />
+                  </span>
+                )}
+              </div>
             </div>
 
             {showReactionPicker && (

@@ -49,7 +49,7 @@ export const getStatusIcon = (status, deliveredCount = 0, readCount = 0) => {
     
     default:
       return (
-        <span className="text-gray-400 text-xs">?</span>
+        <></>
       );
   }
 };
